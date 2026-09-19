@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1)
+# Atlantic Salmon Migration Simulator (v1.1)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and accuracy overlay only.
 
@@ -30,6 +30,14 @@ npm run build
 npm run preview
 ```
 
+Headless accuracy harness (no browser / WebGL):
+
+```bash
+npm run test:accuracy
+```
+
+Fixed-seed scenarios live in `tests/accuracy/`; baselines in `tests/baselines/thresholds.json`; metrics land in `tests/scenarios/`. See [`ACCURACY.md`](./ACCURACY.md).
+
 ## Controls
 
 | UI | Action |
@@ -49,11 +57,12 @@ hydro → env → decisions → cameras → look
 | Hydro | `src/fish/Hydrodynamics.ts` | Buoyancy, drag, body/caudal thrust, pitch/yaw/roll coupling, collision damp |
 | Fins | `src/fish/Fins.ts` | Wired caudal, dorsal, pectorals, pelvic, anal with amplitude/phase caps |
 | Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials |
-| Env | `src/env/*` | River corridor, current field (core/shear/eddies), temperature, holding lies |
-| AI | `src/ai/*` | Sense flow/temp/obstacles → hold / cruise / burst / seek_hold |
+| Env | `src/env/*` | River corridor, current field (core/shear/**hard lie deficits**), temperature, holding lies |
+| AI | `src/ai/*` | Sense → hold / cruise / burst / seek_hold; lie preference + rheotaxis + fatigue |
 | Cameras | `src/cameras/*` | Follow/chase + fish-eye distortion |
 | UI | `src/ui/*` | Camera buttons + HUD + accuracy overlay |
-| Sim | `src/sim/Simulation.ts` | Wire loop |
+| Core | `src/sim/CoreSim.ts` | Headless step loop (sense→decide→integrate) |
+| Sim | `src/sim/Simulation.ts` | Browser renderer + HUD wired to CoreSim |
 
 ## Product locks (v1)
 

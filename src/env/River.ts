@@ -1,16 +1,24 @@
 import * as THREE from 'three';
 import { RIVER } from '../config';
-import { CurrentField } from './CurrentField';
+import { CurrentField, type LiePocket } from './CurrentField';
 import { TemperatureField } from './Temperature';
 import type { SimConfig } from '../config';
 
 export interface HoldingLie {
   position: THREE.Vector3;
   radius: number;
+  kind: LiePocket['kind'];
+  deficit: number;
+}
+
+export interface RiverOptions {
+  /** Build Three.js corridor mesh (browser). Default true. */
+  visual?: boolean;
 }
 
 /**
- * Visual + spatial river corridor and environment fields.
+ * Spatial river corridor and environment fields.
+ * Visual mesh is optional so Node accuracy runs stay headless.
  */
 export class RiverEnvironment {
   readonly group = new THREE.Group();
@@ -18,16 +26,55 @@ export class RiverEnvironment {
   readonly temperature: TemperatureField;
   readonly holdingLies: HoldingLie[];
 
-  constructor(cfg: SimConfig) {
-    this.current = new CurrentField(cfg);
-    this.temperature = new TemperatureField(cfg);
+  constructor(cfg: SimConfig, opts: RiverOptions = {}) {
+    const visual = opts.visual !== false;
+
+    // Discrete hard holding lies: pools, bank scallops, stub boulder wakes
     this.holdingLies = [
-      { position: new THREE.Vector3(-3.2, 0.6, 18), radius: 1.8 },
-      { position: new THREE.Vector3(3.8, 0.7, 35), radius: 2.0 },
-      { position: new THREE.Vector3(-2.5, 0.5, 52), radius: 1.6 },
-      { position: new THREE.Vector3(2.8, 0.65, 68), radius: 1.9 },
+      {
+        position: new THREE.Vector3(-3.2, 0.55, 18),
+        radius: 1.8,
+        kind: 'bank_scallop',
+        deficit: 0.72,
+      },
+      {
+        position: new THREE.Vector3(3.8, 0.65, 35),
+        radius: 2.0,
+        kind: 'boulder_wake',
+        deficit: 0.78,
+      },
+      {
+        position: new THREE.Vector3(-2.5, 0.45, 52),
+        radius: 1.7,
+        kind: 'pool',
+        deficit: 0.65,
+      },
+      {
+        position: new THREE.Vector3(2.8, 0.6, 68),
+        radius: 1.9,
+        kind: 'boulder_wake',
+        deficit: 0.75,
+      },
+      {
+        position: new THREE.Vector3(0.2, 0.5, 12),
+        radius: 1.5,
+        kind: 'pool',
+        deficit: 0.6,
+      },
     ];
-    this.buildMesh();
+
+    const pockets: LiePocket[] = this.holdingLies.map((h) => ({
+      x: h.position.x,
+      y: h.position.y,
+      z: h.position.z,
+      radius: h.radius,
+      deficit: h.deficit,
+      kind: h.kind,
+    }));
+
+    this.current = new CurrentField(cfg, pockets);
+    this.temperature = new TemperatureField(cfg);
+    if (visual) this.buildMesh();
   }
 
   private buildMesh(): void {
@@ -38,7 +85,6 @@ export class RiverEnvironment {
     // Bed
     const bedGeo = new THREE.PlaneGeometry(W + 4, L, 24, 48);
     bedGeo.rotateX(-Math.PI / 2);
-    // Gentle undulation
     const pos = bedGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -68,17 +114,14 @@ export class RiverEnvironment {
       metalness: 0.02,
     });
     for (const side of [-1, 1]) {
-      const bank = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, D + 1, L),
-        bankMat,
-      );
+      const bank = new THREE.Mesh(new THREE.BoxGeometry(1.5, D + 1, L), bankMat);
       bank.position.set(side * (W * 0.5 + 0.4), D * 0.35, L * 0.5);
       bank.receiveShadow = true;
       bank.castShadow = true;
       this.group.add(bank);
     }
 
-    // Water surface (semi-transparent)
+    // Water surface
     const waterGeo = new THREE.PlaneGeometry(W, L, 1, 1);
     waterGeo.rotateX(-Math.PI / 2);
     const waterMat = new THREE.MeshPhysicalMaterial({
@@ -95,14 +138,16 @@ export class RiverEnvironment {
     water.position.set(0, D * 0.95, L * 0.5);
     this.group.add(water);
 
-    // Holding lie markers (subtle)
-    const lieMat = new THREE.MeshBasicMaterial({
-      color: 0x2a6a7a,
-      transparent: true,
-      opacity: 0.25,
-    });
+    // Holding lie markers (subtle) — tint by kind
     for (const lie of this.holdingLies) {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(lie.radius * 0.6, 12, 8), lieMat);
+      const color =
+        lie.kind === 'pool' ? 0x2a6a7a : lie.kind === 'boulder_wake' ? 0x3a5a6a : 0x2a5a5a;
+      const lieMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.28,
+      });
+      const m = new THREE.Mesh(new THREE.SphereGeometry(lie.radius * 0.55, 12, 8), lieMat);
       m.position.copy(lie.position);
       this.group.add(m);
     }
@@ -141,14 +186,12 @@ export class RiverEnvironment {
       normal.x += 1;
       hit = true;
     }
-    // Soft wrap along corridor length (keep in view)
     if (position.z < 2) {
       correction.z += 2 - position.z;
       hit = true;
     }
     if (position.z > RIVER.length - 2) {
       correction.z += RIVER.length - 2 - position.z;
-      // Allow soft stop near upstream end rather than bounce hard
     }
 
     if (normal.lengthSq() > 0) normal.normalize();

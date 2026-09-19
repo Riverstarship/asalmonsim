@@ -1,26 +1,22 @@
 import * as THREE from 'three';
 import { DEFAULT_CONFIG } from '../config';
-import { RiverEnvironment } from '../env/River';
-import { Salmon } from '../fish/Salmon';
-import { DecisionLayer } from '../ai/DecisionLayer';
-import { sense } from '../ai/Sensors';
+import { CoreSim } from './CoreSim';
 import { FollowCamera } from '../cameras/FollowCamera';
 import { FishEyeCamera, type CameraMode } from '../cameras/FishEyeCamera';
 import { Overlay } from '../ui/Overlay';
 import { Controls } from '../ui/Controls';
+import { sense } from '../ai/Sensors';
 
 const ACCURACY = {
-  goal: 'Adult Salmo salar upriver ascent with plausible flow response & holding.',
-  gap: 'No real bathymetry/CFD; simplified thrust; no olfactory/homing cueing.',
-  strategy: 'Next: site current maps, fatigue–recovery curves, then finer mesh.',
+  goal: 'Adult Salmo salar ascent with headless-checked hold/seek/DMG/fatigue.',
+  gap: 'No real bathymetry/CFD; thrust not force-plate fitted; homing is weak bias only.',
+  strategy: 'Harness gates regressions; next: site current maps + calibrated fatigue.',
 };
 
 export class Simulation {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
-  private river: RiverEnvironment;
-  private fish: Salmon;
-  private decisions = new DecisionLayer();
+  private core: CoreSim;
   private follow: FollowCamera;
   private fishEye: FishEyeCamera;
   private cameraMode: CameraMode = 'follow';
@@ -48,12 +44,14 @@ export class Simulation {
 
     this.setupLights();
 
-    const cfg = DEFAULT_CONFIG;
-    this.river = new RiverEnvironment(cfg);
-    this.scene.add(this.river.group);
-
-    this.fish = new Salmon(new THREE.Vector3(0, 1.2, 8));
-    this.scene.add(this.fish.group);
+    this.core = new CoreSim({
+      config: DEFAULT_CONFIG,
+      headless: false,
+      seed: 7,
+      startPosition: new THREE.Vector3(0, 1.2, 8),
+    });
+    this.scene.add(this.core.river.group);
+    this.scene.add(this.core.fish.group);
 
     this.follow = new FollowCamera(w / h);
     this.fishEye = new FishEyeCamera(w / h, w, h);
@@ -86,7 +84,6 @@ export class Simulation {
     fill.position.set(-10, 5, -5);
     this.scene.add(fill);
 
-    // Soft caustic-ish point under surface
     const caustic = new THREE.PointLight(0x4a9aaa, 0.5, 30);
     caustic.position.set(0, 3.5, 40);
     this.scene.add(caustic);
@@ -107,13 +104,10 @@ export class Simulation {
   private frame(): void {
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
-    const snap = sense(this.fish, this.river);
-    const decision = this.decisions.update(dt, snap, this.fish.orientation);
-    this.fish.applyDecision(decision);
-    this.fish.update(dt, this.river);
+    const decision = this.core.step(dt);
 
-    this.follow.update(dt, this.fish);
-    this.fishEye.update(dt, this.fish);
+    this.follow.update(dt, this.core.fish);
+    this.fishEye.update(dt, this.core.fish);
 
     if (this.cameraMode === 'fisheye') {
       this.fishEye.render(this.renderer, this.scene);
@@ -122,17 +116,20 @@ export class Simulation {
     }
 
     const cfg = DEFAULT_CONFIG;
+    const snap = sense(this.core.fish, this.core.river);
     this.overlay.updateHud({
       mode: decision.mode,
       rationale: decision.rationale,
       energy: decision.energy,
-      groundSpeed: this.fish.groundSpeed,
-      waterSpeed: this.fish.speedThroughWater(this.river),
+      groundSpeed: this.core.fish.groundSpeed,
+      waterSpeed: this.core.fish.speedThroughWater(this.core.river),
       flowSpeed: snap.flowSpeed,
       tempC: snap.tempC,
       cameraMode: this.cameraMode,
       season: cfg.season,
       location: cfg.location.name,
+      dmg: this.core.dmg,
+      timeInLie: this.core.timeInLieSec,
     });
   }
 

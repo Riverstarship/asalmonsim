@@ -1,0 +1,25 @@
+{
+  "hold_midchannel": {
+    "maxHoldDownstreamSlip": 0.85,
+    "minTimeInHold": 1.5
+  },
+  "seek_lie_when_tired": {
+    "mustReachOrOccupyLie": true,
+    "minTimeInLieOrSeek": 8.0
+  },
+  "upstream_dmg": {
+    "minDmg": 5.0
+  },
+  "energy_burst_limits": {
+    "maxEndEnergyIfBurstHeavy": 0.7,
+    "maxMeanThrustWhenDrained": 0.85,
+    "requireEnergyDrop": 0.25
+  },
+  "stability": {
+    "maxNanCount": 0,
+    "maxOutOfBoundsCount": 2,
+    "maxAbsX": 6.2,
+    "minY": 0.15,
+    "maxY": 4.1
+  }
+}

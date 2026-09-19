@@ -16,12 +16,15 @@ export interface SenseSnapshot {
   /** Vector toward nearest holding lie. */
   toHoldingLie: THREE.Vector3;
   holdingLieDist: number;
+  /** Radius of nearest holding lie. */
+  lieRadius: number;
   energy: number;
   groundSpeed: number;
 }
 
 /**
  * Sense flow, temperature, obstacles — feeds decision layer.
+ * Flow speeds inside lies reflect real velocity deficits from CurrentField.
  */
 export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const p = fish.position;
@@ -32,7 +35,6 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const bankClearance = halfW - Math.abs(p.x);
   const bedClearance = p.y;
 
-  // Look ahead along heading
   const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(fish.orientation);
   const ahead = p.clone().addScaledVector(forward, 2.5);
   const { hit } = river.resolveCollision(ahead, 0.2);
@@ -53,6 +55,7 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
     obstacleAhead,
     toHoldingLie,
     holdingLieDist,
+    lieRadius: lie.radius,
     energy: fish.energy,
     groundSpeed: fish.groundSpeed,
   };

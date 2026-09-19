@@ -1,25 +1,30 @@
 import * as THREE from 'three';
 import { RIVER, type SimConfig, meanCurrentSpeed } from '../config';
 
+/** Hard holding-lie pocket with a measurable velocity deficit. */
+export interface LiePocket {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  /** Fraction of streamwise speed removed at centre (0–1). */
+  deficit: number;
+  kind: 'pool' | 'bank_scallop' | 'boulder_wake';
+}
+
 /**
  * Simplified river current field: downstream core, bank shear,
- * weak recirculating eddies, depth decay.
+ * hard low-shear holding pockets, depth decay.
  * Fish samples via sample(x, y, z) → world velocity (m/s).
  * +Z = upstream (fish migrates +Z), current flows −Z.
  */
 export class CurrentField {
   readonly meanSpeed: number;
-  private readonly eddies: { x: number; z: number; r: number; strength: number }[];
+  private readonly pockets: LiePocket[];
 
-  constructor(cfg: SimConfig) {
+  constructor(cfg: SimConfig, pockets: LiePocket[] = []) {
     this.meanSpeed = meanCurrentSpeed(cfg);
-    // Fixed lite eddy set along corridor
-    this.eddies = [
-      { x: -3.5, z: 15, r: 2.2, strength: 0.35 },
-      { x: 4.0, z: 32, r: 2.8, strength: 0.4 },
-      { x: -2.0, z: 48, r: 2.0, strength: 0.3 },
-      { x: 3.2, z: 62, r: 2.5, strength: 0.38 },
-    ];
+    this.pockets = pockets;
   }
 
   /** Sample current velocity at world position (m/s). */
@@ -45,21 +50,31 @@ export class CurrentField {
       out.x += -Math.sign(nx) * shear;
     }
 
-    // Eddies: tangential swirl in XZ
-    for (const e of this.eddies) {
-      const dx = x - e.x;
-      const dz = z - e.z;
-      const d2 = dx * dx + dz * dz;
-      const r2 = e.r * e.r;
+    // Hard holding pockets: real streamwise velocity deficits sensors measure
+    for (const p of this.pockets) {
+      const dx = x - p.x;
+      const dy = y - p.y;
+      const dz = z - p.z;
+      const d2 = dx * dx + dy * dy * 0.5 + dz * dz;
+      const r2 = p.radius * p.radius;
       if (d2 < r2 * 4) {
         const fall = Math.exp(-d2 / r2);
-        const s = e.strength * this.meanSpeed * fall;
-        out.x += -dz * s * 0.5;
-        out.z += dx * s * 0.5;
+        // Reduce |streamwise| toward zero (shelter)
+        out.z *= 1 - p.deficit * fall;
+        // Weak recirculation in boulder wakes
+        if (p.kind === 'boulder_wake') {
+          const s = 0.15 * p.deficit * this.meanSpeed * fall;
+          out.x += -dz * s * 0.35;
+          out.z += dx * s * 0.15;
+        }
+        // Bank scallops pull slightly toward bank pocket
+        if (p.kind === 'bank_scallop') {
+          out.x += -Math.sign(p.x) * 0.08 * this.meanSpeed * fall;
+        }
       }
     }
 
-    // Tiny vertical (upwell near eddy centres — lite)
+    // Tiny vertical (upwell lite)
     out.y += Math.sin(z * 0.2 + x) * 0.02 * this.meanSpeed;
 
     return out;
@@ -76,4 +91,5 @@ export class CurrentField {
     const dVz = (d.z - c.z) / (2 * eps);
     return Math.sqrt(dVx * dVx + dVz * dVz);
   }
+
 }

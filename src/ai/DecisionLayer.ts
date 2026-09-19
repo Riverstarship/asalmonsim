@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SenseSnapshot } from './Sensors';
+import type { SeededRng } from '../util/rng';
 
 export type BehaviorMode = 'hold' | 'cruise' | 'burst' | 'seek_hold';
 
@@ -14,97 +15,135 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer: sense flow/temp/obstacles → hold / cruise / burst / seek holding lie.
- * Drives hydro SwimCommand. Observational — no player input.
+ * Decision layer v1.1: sense → hold / cruise / burst / seek holding lie.
+ * Prefers lies when energy low / flow high; weak upstream rheotaxis/homing;
+ * light fatigue curves (ascent costs scale with opposing flow).
  */
 export class DecisionLayer {
   private energy = 1;
   private mode: BehaviorMode = 'cruise';
   private modeTimer = 0;
   private readonly preferredTemp = 9.5;
+  private readonly rng: SeededRng | null;
+
+  constructor(rng: SeededRng | null = null) {
+    this.rng = rng;
+  }
+
+  setEnergy(e: number): void {
+    this.energy = THREE.MathUtils.clamp(e, 0.05, 1);
+  }
+
+  getEnergy(): number {
+    return this.energy;
+  }
+
+  private rand(): number {
+    return this.rng ? this.rng.next() : Math.random();
+  }
 
   update(dt: number, sense: SenseSnapshot, orientation: THREE.Quaternion): DecisionOutput {
-    this.energy = THREE.MathUtils.clamp(
-      this.energy - this.drainRate() * dt + 0.04 * dt,
-      0.05,
-      1,
-    );
+    const drain = this.drainRate(sense);
+    const recover = this.recoverRate(sense);
+    this.energy = THREE.MathUtils.clamp(this.energy - drain * dt + recover * dt, 0.05, 1);
     this.modeTimer += dt;
 
-    // Re-evaluate periodically or on strong stimuli
-    if (this.modeTimer > 0.6 || sense.obstacleAhead > 0.7 || sense.flowSpeed > 1.1) {
+    if (
+      this.modeTimer > 0.55 ||
+      sense.obstacleAhead > 0.7 ||
+      sense.flowSpeed > 1.0 ||
+      this.energy < 0.32
+    ) {
       this.mode = this.chooseMode(sense);
       this.modeTimer = 0;
     }
 
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(orientation);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(orientation);
+    const upstream = new THREE.Vector3(0, 0, 1);
 
     let thrust = 0.35;
     let pitch = 0;
     let yaw = 0;
     let rationale = '';
 
+    // Weak upstream rheotaxis / homing bias (always on) — non-mutating cross
+    yaw += new THREE.Vector3().crossVectors(forward, upstream).y * 0.22;
+
     switch (this.mode) {
       case 'hold': {
-        // Station-hold: thrust to cancel downstream drift; linger near lies
-        const need = 0.15 + sense.flowSpeed * 0.55;
-        thrust = THREE.MathUtils.clamp(need * 0.45, 0.15, 0.45);
+        // Station-hold: match opposing flow enough to limit slip (not decorative)
+        const need = 0.18 + sense.flowSpeed * 0.72;
+        thrust = THREE.MathUtils.clamp(need, 0.18, 0.62);
         if (sense.holdingLieDist < 4) {
-          yaw += sense.toHoldingLie.dot(right) * 0.15;
-          pitch += Math.sign(sense.toHoldingLie.y) * 0.08;
+          yaw += sense.toHoldingLie.dot(right) * 0.22;
+          pitch += Math.sign(sense.toHoldingLie.y) * 0.1;
         }
         pitch += (0.7 - sense.bedClearance) * 0.05;
-        rationale = 'Station-holding against current';
+        rationale =
+          sense.holdingLieDist < sense.lieRadius
+            ? 'Holding in low-shear lie'
+            : 'Station-holding against current';
         break;
       }
       case 'cruise': {
-        thrust = 0.4 + Math.min(0.25, sense.flowSpeed * 0.2);
-        const upstream = new THREE.Vector3(0, 0, 1);
-        yaw += forward.cross(upstream).y * 0.4;
-        // Steer toward channel centre when near banks (flow.x shear cue + lie bias)
+        thrust = 0.38 + Math.min(0.28, sense.flowSpeed * 0.22);
+        yaw += new THREE.Vector3().crossVectors(forward, upstream).y * 0.35;
         if (sense.bankClearance < 2) {
-          const towardCentre = -Math.sign(sense.flow.x !== 0 ? sense.flow.x : sense.toHoldingLie.x || 0.01);
+          const towardCentre = -Math.sign(
+            sense.flow.x !== 0 ? sense.flow.x : sense.toHoldingLie.x || 0.01,
+          );
           yaw += towardCentre * (1.2 - sense.bankClearance) * 0.35;
         }
         pitch += (1.2 - sense.bedClearance) * 0.04;
-        rationale = 'Steady upstream cruise';
+        rationale = 'Steady upstream cruise (rheotaxis)';
         break;
       }
       case 'burst': {
-        thrust = 0.85 + (1 - this.energy) * -0.1;
-        thrust = THREE.MathUtils.clamp(thrust, 0.7, 1);
-        // Punch through high flow / obstacle
-        yaw += (Math.random() - 0.5) * 0.05;
+        const fatigueCap = 0.55 + this.energy * 0.45;
+        thrust = THREE.MathUtils.clamp(0.88 * fatigueCap, 0.55, 1);
+        yaw += (this.rand() - 0.5) * 0.05;
         pitch += 0.05;
-        rationale = 'Burst through high flow / obstacle';
+        rationale =
+          this.energy < 0.45
+            ? 'Fatigued burst — thrust capped'
+            : 'Burst through high flow / obstacle';
         break;
       }
       case 'seek_hold': {
-        thrust = 0.5;
-        const dir = sense.toHoldingLie.clone().normalize();
-        yaw += dir.dot(right) * 0.6;
-        pitch += dir.y * 0.4;
-        // Face somewhat upstream while seeking
-        yaw += forward.cross(new THREE.Vector3(0, 0, 1)).y * 0.2;
-        rationale = 'Seeking holding lie';
+        // Push into the pocket; more authority when depleted
+        thrust = this.energy < 0.35 ? 0.55 : 0.48;
+        if (sense.toHoldingLie.lengthSq() > 1e-6) {
+          const dir = sense.toHoldingLie.clone().normalize();
+          const steer = this.energy < 0.4 ? 1.05 : 0.8;
+          yaw += dir.dot(right) * steer;
+          pitch += dir.y * 0.5;
+        }
+        yaw += new THREE.Vector3().crossVectors(forward, upstream).y * 0.18;
+        rationale =
+          this.energy < 0.4
+            ? 'Low energy — seeking holding lie'
+            : 'High flow — seeking holding lie';
         break;
       }
     }
 
-    // Obstacle avoidance overlay
     if (sense.obstacleAhead > 0.4) {
-      yaw += (Math.random() > 0.5 ? 1 : -1) * sense.obstacleAhead * 0.5;
+      yaw += (this.rand() > 0.5 ? 1 : -1) * sense.obstacleAhead * 0.5;
       pitch += 0.15;
       if (this.mode !== 'burst' && sense.flowSpeed > 0.7) {
-        thrust = Math.max(thrust, 0.75);
+        thrust = Math.max(thrust, Math.min(0.75, 0.5 + this.energy * 0.3));
       }
     }
 
-    // Temperature preference (mild)
     const tempErr = sense.tempC - this.preferredTemp;
     if (Math.abs(tempErr) > 1.5 && this.mode === 'cruise') {
-      pitch += -Math.sign(tempErr) * 0.06; // warmer → go deeper (cooler)
+      pitch += -Math.sign(tempErr) * 0.06;
+    }
+
+    // Fatigue caps burst/cruise, but hold must keep enough thrust to station-hold
+    if (this.energy < 0.25 && this.mode !== 'hold') {
+      thrust = Math.min(thrust, 0.4);
     }
 
     const roll = -yaw * 0.4;
@@ -121,38 +160,54 @@ export class DecisionLayer {
   }
 
   private chooseMode(sense: SenseSnapshot): BehaviorMode {
-    // Low energy → seek hold or hold
-    if (this.energy < 0.35) {
-      return sense.holdingLieDist < 3 ? 'hold' : 'seek_hold';
+    const inOrNearLie = sense.holdingLieDist < sense.lieRadius * 1.25;
+    const nearLie = sense.holdingLieDist < 5;
+
+    if (this.energy < 0.38) {
+      return inOrNearLie || sense.holdingLieDist < 3.5 ? 'hold' : 'seek_hold';
     }
-    // Strong adverse flow or high shear → burst or seek shelter
-    if (sense.flowSpeed > 1.05 || sense.shear > 0.35) {
-      if (this.energy > 0.55 && sense.holdingLieDist > 5) return 'burst';
-      return sense.holdingLieDist < 6 ? 'seek_hold' : 'burst';
+
+    if (sense.flowSpeed > 0.95 || sense.shear > 0.32) {
+      if (this.energy < 0.55 || nearLie) {
+        return inOrNearLie ? 'hold' : 'seek_hold';
+      }
+      if (this.energy > 0.6 && sense.holdingLieDist > 6) return 'burst';
+      return nearLie ? 'seek_hold' : 'burst';
     }
-    // Near comfortable lie and moderate flow → hold briefly
-    if (sense.holdingLieDist < 2.2 && sense.flowSpeed < 0.7 && Math.random() < 0.45) {
+
+    if (inOrNearLie && sense.flowSpeed < 0.75 && this.rand() < 0.55) {
       return 'hold';
     }
-    // Obstacle → burst
-    if (sense.obstacleAhead > 0.75) return 'burst';
-    // Default migration cruise
+
+    if (sense.obstacleAhead > 0.75 && this.energy > 0.5) return 'burst';
+
     if (sense.holdingLieDist < 4 && this.energy < 0.55) return 'seek_hold';
+
     return 'cruise';
   }
 
-  private drainRate(): number {
+  private drainRate(sense: SenseSnapshot): number {
+    const oppose = Math.max(0, sense.flowSpeed - 0.35);
+    const ascent = oppose * 0.055;
     switch (this.mode) {
       case 'burst':
-        return 0.22;
+        return 0.32 + ascent * 2.2;
       case 'cruise':
-        return 0.06;
+        return 0.058 + ascent;
       case 'seek_hold':
-        return 0.08;
+        return 0.075 + ascent * 0.7;
       case 'hold':
-        return 0.03;
+        return 0.022 + sense.flowSpeed * 0.01;
       default:
         return 0.05;
     }
+  }
+
+  private recoverRate(sense: SenseSnapshot): number {
+    if (this.mode === 'hold' && sense.holdingLieDist <= sense.lieRadius * 1.2) {
+      return 0.09;
+    }
+    if (this.mode === 'hold') return 0.045;
+    return 0.028;
   }
 }

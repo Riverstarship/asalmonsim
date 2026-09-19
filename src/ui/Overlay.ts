@@ -9,6 +9,8 @@ export interface HudState {
   cameraMode: string;
   season: string;
   location: string;
+  dmg: number;
+  timeInLie: number;
 }
 
 export interface AccuracyContent {
@@ -56,6 +58,8 @@ export class Overlay {
       <div class="value">${escapeHtml(s.mode)} — ${escapeHtml(s.rationale)}</div>
       <div class="label">Energy</div>
       <div class="value">${(s.energy * 100).toFixed(0)}%</div>
+      <div class="label">DMG (upstream) · time-in-lie</div>
+      <div class="value">${s.dmg.toFixed(1)} m · ${s.timeInLie.toFixed(1)} s</div>
       <div class="label">Ground / through-water / flow</div>
       <div class="value">${s.groundSpeed.toFixed(2)} / ${s.waterSpeed.toFixed(2)} / ${s.flowSpeed.toFixed(2)} m/s</div>
       <div class="label">Temp</div>

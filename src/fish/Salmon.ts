@@ -5,6 +5,11 @@ import { Hydrodynamics, type SwimCommand } from './Hydrodynamics';
 import type { RiverEnvironment } from '../env/River';
 import type { DecisionOutput } from '../ai/DecisionLayer';
 
+export interface SalmonOptions {
+  /** Build visual mesh. Default true; false for headless Node runs. */
+  visual?: boolean;
+}
+
 export class Salmon {
   readonly group: THREE.Group;
   readonly fins: FinController;
@@ -22,9 +27,10 @@ export class Salmon {
   mode = 'cruise';
   energy = 1;
 
-  constructor(start: THREE.Vector3) {
+  constructor(start: THREE.Vector3, opts: SalmonOptions = {}) {
     this.fins = new FinController();
-    this.group = createSalmonMesh(this.fins);
+    const visual = opts.visual !== false;
+    this.group = visual ? createSalmonMesh(this.fins) : new THREE.Group();
     this.position = start.clone();
     this.group.position.copy(this.position);
     // Face upstream (+Z)

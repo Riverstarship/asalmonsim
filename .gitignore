@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated accuracy metrics (recreated by npm run test:accuracy)
+tests/scenarios/
