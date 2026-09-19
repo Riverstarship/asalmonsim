@@ -9,7 +9,9 @@ Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon 
 
 The repository is **temporarily public** so GitHub Pages can serve the demo on a free plan. After testing, you can make it private again — but note that on free GitHub, **private repos lose free Pages** (disable Pages or expect the public site to stop when going private).
 
-CI builds on every push to `main` via `.github/workflows/deploy.yml` (`node_modules` / `dist` stay gitignored).
+**Deploy today:** static build on the `gh-pages` branch (Vite `base: '/asalmonsim/'`). `node_modules` / `dist` stay gitignored on `main`; CI builds locally / in Actions when enabled.
+
+**Actions workflow (ready, not yet active):** `ci/github-pages-deploy.yml` is the intended `upload-pages-artifact` + `deploy-pages` workflow. Pushing it to `.github/workflows/` requires a PAT with the `workflow` scope (current token is `repo` only). After adding that scope, copy the file to `.github/workflows/deploy.yml`, push, and switch Pages to “GitHub Actions”.
 
 ## Run
 
