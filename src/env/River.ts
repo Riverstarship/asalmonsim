@@ -44,32 +44,32 @@ export class RiverEnvironment {
     // Discrete hard holding lies: pools, bank scallops, stub boulder wakes
     this.holdingLies = [
       {
-        position: new THREE.Vector3(-3.2, 0.55, 18),
-        radius: 1.8,
+        position: new THREE.Vector3(-2.4, 1.65, 18),
+        radius: 2.2,
         kind: 'bank_scallop',
         deficit: 0.72,
       },
       {
-        position: new THREE.Vector3(3.8, 0.65, 35),
-        radius: 2.0,
+        position: new THREE.Vector3(2.5, 1.7, 35),
+        radius: 2.3,
         kind: 'boulder_wake',
         deficit: 0.78,
       },
       {
-        position: new THREE.Vector3(-2.5, 0.45, 52),
-        radius: 1.7,
+        position: new THREE.Vector3(-2.0, 1.6, 52),
+        radius: 2.1,
         kind: 'pool',
         deficit: 0.65,
       },
       {
-        position: new THREE.Vector3(2.8, 0.6, 68),
-        radius: 1.9,
+        position: new THREE.Vector3(2.2, 1.7, 68),
+        radius: 2.2,
         kind: 'boulder_wake',
         deficit: 0.75,
       },
       {
-        position: new THREE.Vector3(0.2, 0.5, 12),
-        radius: 1.5,
+        position: new THREE.Vector3(0.2, 1.6, 12),
+        radius: 2.0,
         kind: 'pool',
         deficit: 0.6,
       },
@@ -251,6 +251,31 @@ export class RiverEnvironment {
 
     if (normal.lengthSq() > 0) normal.normalize();
     return { correction, normal, hit, bedHit, bankHit, surfaceHit };
+  }
+
+  /**
+   * Clamp a world point into the free-water volume (inside bed / banks / surface).
+   * Used by fish-eye POV so the camera cannot embed in geometry.
+   */
+  clampIntoFreeWater(position: THREE.Vector3, margin = 0.25): THREE.Vector3 {
+    const minY = this.bedElevation(position.x, position.z) + margin;
+    const maxY = this.surfaceElevation() - margin;
+    const maxX = this.bankLimit(margin);
+    position.x = THREE.MathUtils.clamp(position.x, -maxX, maxX);
+    position.y = THREE.MathUtils.clamp(position.y, minY, maxY);
+    position.z = THREE.MathUtils.clamp(position.z, 2 + margin, RIVER.length - 2 - margin);
+    return position;
+  }
+
+  /**
+   * Ellipsoid occupancy: vertical axis stretched so mid-column fish can
+   * still "use" a structure pocket without hugging the bed.
+   */
+  occupiesLie(pos: THREE.Vector3, lie: HoldingLie, scale = 1.15): boolean {
+    const dx = (pos.x - lie.position.x) / lie.radius;
+    const dy = (pos.y - lie.position.y) / (lie.radius * 1.35);
+    const dz = (pos.z - lie.position.z) / lie.radius;
+    return dx * dx + dy * dy + dz * dz <= scale * scale;
   }
 
   nearestHoldingLie(pos: THREE.Vector3): HoldingLie {

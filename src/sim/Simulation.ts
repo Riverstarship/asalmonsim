@@ -110,7 +110,7 @@ export class Simulation {
     const decision = this.core.step(dt);
 
     this.follow.update(dt, this.core.fish);
-    this.fishEye.update(dt, this.core.fish);
+    this.fishEye.update(dt, this.core.fish, this.core.river);
 
     if (this.cameraMode === 'fisheye') {
       this.fishEye.render(this.renderer, this.scene);
