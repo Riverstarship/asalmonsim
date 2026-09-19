@@ -41,7 +41,7 @@ export class RiverEnvironment {
   constructor(cfg: SimConfig, opts: RiverOptions = {}) {
     const visual = opts.visual !== false;
 
-    // Discrete hard holding lies: pools, bank scallops, stub boulder wakes
+    // Holding-lie markers (metadata); velocity deficits are continuous gradients in CurrentField
     this.holdingLies = [
       {
         position: new THREE.Vector3(-2.4, 1.65, 18),

@@ -80,6 +80,17 @@ export interface CoreMetrics {
   rollRateVariance: number;
   /** Peak |ω_roll| (rad/s). */
   maxAbsRollRate: number;
+  /** Mean |flow| while in hold mode (m/s). */
+  meanHoldFlow: number;
+  /** Mean |flow| while occupying a lie (m/s). */
+  meanLieFlow: number;
+  /** Mean mid-channel reference |flow| sampled at fish y,z during hold (m/s). */
+  meanHoldMidRefFlow: number;
+  /** Seconds in hold with |x| near mid-channel and local flow near core speed. */
+  timeHoldFastCore: number;
+  /** hold samples used for flow means. */
+  holdFlowSamples: number;
+  lieFlowSamples: number;
 }
 
 /**
@@ -130,6 +141,12 @@ export class CoreSim {
   private maxAbsRollRate = 0;
   private rollRateSum = 0;
   private rollRateSqSum = 0;
+  private holdFlowSum = 0;
+  private holdFlowSamples = 0;
+  private holdMidRefSum = 0;
+  private lieFlowSum = 0;
+  private lieFlowSamples = 0;
+  private timeHoldFastCore = 0;
   private lastDecision: DecisionOutput | null = null;
   private readonly _rollRight = new THREE.Vector3();
   private readonly _rollForward = new THREE.Vector3();
@@ -233,6 +250,15 @@ export class CoreSim {
             )
           : 0,
       maxAbsRollRate: this.maxAbsRollRate,
+      meanHoldFlow:
+        this.holdFlowSamples > 0 ? this.holdFlowSum / this.holdFlowSamples : 0,
+      meanLieFlow:
+        this.lieFlowSamples > 0 ? this.lieFlowSum / this.lieFlowSamples : 0,
+      meanHoldMidRefFlow:
+        this.holdFlowSamples > 0 ? this.holdMidRefSum / this.holdFlowSamples : 0,
+      timeHoldFastCore: this.timeHoldFastCore,
+      holdFlowSamples: this.holdFlowSamples,
+      lieFlowSamples: this.lieFlowSamples,
     };
   }
 
@@ -322,6 +348,22 @@ export class CoreSim {
       this.reachedLie = true;
     }
     if (snap.holdingLieDist < lie.radius * 1.5) this.reachedLie = true;
+
+    // v1.5 continuous hydraulics: occupancy vs velocity deficit
+    if (decision.mode === 'hold') {
+      this.holdFlowSum += snap.flowSpeed;
+      this.holdFlowSamples += 1;
+      const midRef = this.river.current.midChannelSpeed(p.y, p.z);
+      this.holdMidRefSum += midRef;
+      // Fast core: near centreline and local flow within 75% of mid-channel ref
+      if (Math.abs(p.x) < 1.8 && snap.flowSpeed > midRef * 0.75) {
+        this.timeHoldFastCore += dt;
+      }
+    }
+    if (inLie) {
+      this.lieFlowSum += snap.flowSpeed;
+      this.lieFlowSamples += 1;
+    }
 
     // Attitude / roll stability (v1.4)
     const roll = this.signedRollRad();

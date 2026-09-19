@@ -70,6 +70,14 @@ interface Thresholds {
     maxAbsRollRate: number;
     maxNanCount: number;
   };
+  continuous_hydraulics: {
+    maxLieVsMidRatio: number;
+    maxHoldVsMidRatio: number;
+    maxLieFlowVsMidRatio: number;
+    maxTimeHoldFastCore: number;
+    minBankDeficitRatio: number;
+    minSurfaceVsBedRatio: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -275,6 +283,30 @@ function checkAttitude(m: CoreMetrics, t: Thresholds['attitude_hydro']): Check[]
   ];
 }
 
+
+function checkContinuous(m: CoreMetrics, t: Thresholds['continuous_hydraulics']): Check[] {
+  const holdRatio =
+    m.meanHoldMidRefFlow > 1e-6 ? m.meanHoldFlow / m.meanHoldMidRefFlow : 0;
+  const lieRatio =
+    m.meanHoldMidRefFlow > 1e-6 ? m.meanLieFlow / m.meanHoldMidRefFlow : 0;
+  // If no hold/lie samples, skip ratio gates (but fail fast-core if somehow holding nowhere)
+  const checks: Check[] = [
+    {
+      ok: m.holdFlowSamples === 0 || holdRatio <= t.maxHoldVsMidRatio,
+      msg: `holdFlow/midRef ${holdRatio.toFixed(3)} <= ${t.maxHoldVsMidRatio} (n=${m.holdFlowSamples})`,
+    },
+    {
+      ok: m.lieFlowSamples === 0 || lieRatio <= t.maxLieFlowVsMidRatio,
+      msg: `lieFlow/midRef ${lieRatio.toFixed(3)} <= ${t.maxLieFlowVsMidRatio} (n=${m.lieFlowSamples})`,
+    },
+    {
+      ok: m.timeHoldFastCore <= t.maxTimeHoldFastCore,
+      msg: `timeHoldFastCore ${m.timeHoldFastCore.toFixed(2)}s <= ${t.maxTimeHoldFastCore}`,
+    },
+  ];
+  return checks;
+}
+
 function main(): void {
   mkdirSync(METRICS_DIR, { recursive: true });
   if (!existsSync(BASELINE_PATH)) {
@@ -285,22 +317,81 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.4 attitude hydro)\n');
+  console.log('asalmonsim accuracy harness (v1.5 continuous hydraulics)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
+    const th = thresholds.continuous_hydraulics;
     const lie = probe.river.holdingLies[1]!;
-    const mid = probe.river.current.sample(0, lie.position.y, lie.position.z);
-    const inLie = probe.river.current.sample(lie.position.x, lie.position.y, lie.position.z);
+    const y = lie.position.y;
+    const z = lie.position.z;
+    const mid = probe.river.current.sample(0, y, z);
+    const inLie = probe.river.current.sample(lie.position.x, y, z);
+    const bank = probe.river.current.sample(5.2, y, z);
+    const bed = probe.river.current.sample(0, 0.4, z);
+    const surf = probe.river.current.sample(0, 3.2, z);
     const midSp = mid.length();
     const lieSp = inLie.length();
-    const ok = lieSp < midSp * 0.55;
-    console.log(`[${ok ? 'PASS' : 'FAIL'}] lie_velocity_deficit`);
+    const bankSp = bank.length();
+    const bedSp = bed.length();
+    const surfSp = surf.length();
+    const lieRatio = midSp > 1e-6 ? lieSp / midSp : 1;
+    const bankRatio = bankSp > 1e-6 ? midSp / bankSp : 0;
+    const depthRatio = bedSp > 1e-6 ? surfSp / bedSp : 0;
+    // Smoothness: finite difference magnitude stays bounded (no hard discontinuities)
+    const eps = 0.25;
+    const a = probe.river.current.sample(lie.position.x - eps, y, z);
+    const b = probe.river.current.sample(lie.position.x + eps, y, z);
+    const grad = a.distanceTo(b) / (2 * eps);
+    const turb = probe.river.current.turbulenceIntensity(lie.position.x, y, z);
+
+    const checks: Check[] = [
+      {
+        ok: lieRatio <= th.maxLieVsMidRatio,
+        msg: `lie/mid ${lieRatio.toFixed(3)} <= ${th.maxLieVsMidRatio} (${lie.kind})`,
+      },
+      {
+        ok: bankRatio >= th.minBankDeficitRatio,
+        msg: `mid/bank ${bankRatio.toFixed(3)} >= ${th.minBankDeficitRatio}`,
+      },
+      {
+        ok: depthRatio >= th.minSurfaceVsBedRatio,
+        msg: `surf/bed ${depthRatio.toFixed(3)} >= ${th.minSurfaceVsBedRatio}`,
+      },
+      {
+        ok: grad < 2.5 && Number.isFinite(grad),
+        msg: `smooth grad ${grad.toFixed(3)} < 2.5 m/s per m`,
+      },
+      {
+        ok: turb > 0.15 && turb < 1.3,
+        msg: `turbulence proxy ${turb.toFixed(3)} in (0.15, 1.3)`,
+      },
+    ];
+    const ok = checks.every((c) => c.ok);
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] continuous_field_probe`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
     console.log(
-      `       mid-channel ${midSp.toFixed(3)} m/s vs lie(${lie.kind}) ${lieSp.toFixed(3)} m/s`,
+      `       mid ${midSp.toFixed(3)} lie ${lieSp.toFixed(3)} bank ${bankSp.toFixed(3)} bed ${bedSp.toFixed(3)} surf ${surfSp.toFixed(3)} m/s`,
     );
     if (!ok) failed += 1;
-    summary.lie_velocity_deficit = { ok, midSp, lieSp, kind: lie.kind };
+    summary.continuous_field_probe = {
+      ok,
+      midSp,
+      lieSp,
+      bankSp,
+      bedSp,
+      surfSp,
+      lieRatio,
+      bankRatio,
+      depthRatio,
+      grad,
+      turb,
+      kind: lie.kind,
+    };
+    // Keep legacy alias for older summaries
+    summary.lie_velocity_deficit = { ok: lieRatio <= th.maxLieVsMidRatio, midSp, lieSp, kind: lie.kind };
   }
 
   for (const def of SCENARIOS) {
@@ -338,6 +429,11 @@ function main(): void {
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
 
+    // v1.5: occupancy ↔ V-deficit gates on hold-heavy scenarios
+    if (def.id === 'hold_midchannel' || def.id === 'duty_cycle_ethology' || def.id === 'seek_lie_when_tired') {
+      checks = checks.concat(checkContinuous(m, thresholds.continuous_hydraulics));
+    }
+
     const ok = checks.every((c) => c.ok);
     if (!ok) failed += 1;
     const mark = ok ? 'PASS' : 'FAIL';
@@ -351,7 +447,9 @@ function main(): void {
         ` lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
         ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}` +
         ` rollMax=${((m.maxAbsRoll * 180) / Math.PI).toFixed(1)}°` +
-        ` |ωr|=${m.meanAbsRollRate.toFixed(3)}`,
+        ` |ωr|=${m.meanAbsRollRate.toFixed(3)}` +
+        ` holdV=${m.meanHoldFlow.toFixed(3)} midRef=${m.meanHoldMidRefFlow.toFixed(3)}` +
+        ` fastCore=${m.timeHoldFastCore.toFixed(1)}s`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };

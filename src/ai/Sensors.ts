@@ -6,6 +6,8 @@ export interface SenseSnapshot {
   flow: THREE.Vector3;
   flowSpeed: number;
   shear: number;
+  /** Cheap turbulence-intensity proxy (0 quiet → ~1 abrupt shear/wake). */
+  turbulence: number;
   tempC: number;
   /** Distance to nearest bank (m), accounting for body radius. */
   bankClearance: number;
@@ -39,6 +41,7 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const r = fish.bodyRadius;
   const flow = river.current.sample(p.x, p.y, p.z);
   const shear = river.current.shearMagnitude(p.x, p.y, p.z);
+  const turbulence = river.current.turbulenceIntensity(p.x, p.y, p.z);
   const tempC = river.temperature.sample(p.x, p.y, p.z);
   const bankClearance = river.bankClearanceAt(p, r);
   const bedClearance = river.bedClearanceAt(p, r);
@@ -61,6 +64,7 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
     flow,
     flowSpeed: flow.length(),
     shear,
+    turbulence,
     tempC,
     bankClearance,
     bedClearance,

@@ -53,5 +53,13 @@
     "maxRollRateVariance": 0.05,
     "maxAbsRollRate": 0.4,
     "maxNanCount": 0
+  },
+  "continuous_hydraulics": {
+    "maxLieVsMidRatio": 0.55,
+    "maxHoldVsMidRatio": 0.72,
+    "maxLieFlowVsMidRatio": 0.65,
+    "maxTimeHoldFastCore": 4.0,
+    "minBankDeficitRatio": 1.15,
+    "minSurfaceVsBedRatio": 1.25
   }
 }

@@ -25,18 +25,19 @@ Sources used for planning (not claimed as “implemented”):
 
 **What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-## Gap vs current build (v1.4)
+## Gap vs current build (v1.5)
 
-| Ethology target | Current sim (v1.4) | Gap |
+| Ethology target | Current sim (v1.5) | Gap |
 |-----------------|---------------------|-----|
-| Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; yaw→roll coupling removed; roll cmd ≈0; harness `attitude_hydro` (roll ≈ 0°) | Pitch still angle-capped (~41°); no true fin-generated moments |
+| Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; harness `attitude_hydro` (roll ≈ 0°) | Pitch still angle-capped (~41°); no true fin-generated moments |
 | Stepwise move/hold duty cycle | Explicit migrate/hold phases + hysteresis; harness `duty_cycle_ethology` | Hold fraction still short of telemetry “mostly holding” residency |
-| Near-zero ground speed in lies | Low thrust match + slip/surge correction; `timeHoldLowSpeed` gated | Occasional slip when exiting ellipsoid pockets |
+| Near-zero ground speed in lies | Low thrust match + slip/surge correction; `timeHoldLowSpeed` gated | Occasional slip on soft wake edges |
 | Mid-column when moving | Mid-column pitch on cruise/burst; fraction gated in harness | Mid-column fraction ~0.3–0.5 of migrate time — room to climb |
-| Low-V structure selection | Hard lie pockets + ellipsoid occupy + seek-when-holding | Needs continuous hydraulic gradients (**v1.5**) |
+| Low-V structure selection | **v1.5:** continuous jet / bank BL / depth / pool & boulder-wake gradients; lie markers metadata; harness `continuous_field_probe` + hold/lie V-deficit gates | Not real ADCP/CFD; synthetic only |
 | Burst then recover | Burst only for high flow/obstacle; then hold/seek lie | Obstacle sensing still coarse |
-| Anticipatory avoidance | Bank/bed/surface clearance steering + bank escape | Bed scrape counts still O(10²)–O(10³) under hard clamps |
+| Anticipatory avoidance | Bank/bed/surface clearance + light turbulence-proxy bias when seeking | Bed scrape counts still O(10²)–O(10³) under hard clamps |
 | Fish-eye observation | **v1.2b:** direct wide-FOV to screen; POV clamped in free water | Barrel distortion deferred (flag default off) |
+| Activity ≫ mild temp energy cost | Activity-dominated drain; temp unused as metabolic multiplier | **v1.6** fatigue/temp curves |
 
 ## Version plan (toward the goal)
 
@@ -45,16 +46,16 @@ Sources used for planning (not claimed as “implemented”):
 | **v1.2b** ✓ | Fish-eye unblack (direct wide-FOV; clamp POV in free water). **Sidecar.** | Lets you observe behavior | Fish-eye shows corridor; barrel RT off |
 | **v1.3** ✓ | **Duty-cycle migration + mid-water behavior** | Stepwise ascent + mid-column + anticipatory avoidance | ↑ time-in-hold; ↑ mid-column migrate frac; ↓ scrape caps vs v1.2a; hold slip low in lies; DMG during migrate windows |
 | **v1.4** ✓ | **Attitude hydro** — dorsal-up rebuild, roll damp/rate caps, kill yaw→roll corkscrew; roll cmd automatic | Ethology can express without spinning plant | `attitude_hydro`: \|roll\| ≈ 0°; low \|ω_roll\|; existing scenarios still pass |
-| **v1.5** | Richer hydraulic field (same `sample()` API): shear, pools, boulder wakes as continuous gradients | Makes lie choice physically motivated | Lie occupancy correlates with local V deficit; avoid high-V core when holding |
+| **v1.5** ✓ | Richer hydraulic field (same `sample()` API): mid-channel jet, bank BL, depth decay, pools & boulder wakes as **continuous** gradients; turbulence-intensity proxy | Makes lie choice physically motivated | `continuous_field_probe`; hold/lie |flow| < mid-channel ref; low `timeHoldFastCore` |
 | **v1.6** | Fatigue / temp metabolic multipliers (OOM from Lennox-style curves) | Activity cost ≫ mild temp cost | Continuous cruise drains faster than hold; temp scales drain modestly |
 | **v1.7** | Undulatory / biomechanics thrust | Body motion generates force | Gait metrics; still decision-outer-loop |
 | **Later** | Olfactory/homing lite, thermoregulatory refuge shifts, ocean/estuary packs, visuals | Expand habitat without rewriting fish | Portable fish + env packs |
 
-**Explicitly deferred until listed version:** soft-wall hydro, CFD site maps before v1.5, barrel-distortion polish, textures, in-app accuracy overlay.
+**Explicitly deferred until listed version:** real ADCP/CFD import, undulatory biomechanics, Lennox temp curves (v1.6), barrel-distortion polish, textures, in-app accuracy overlay.
 
 ## Strategy (one line)
 
-Unblack the camera → hold/move like telemetry (v1.3) → **stabilize attitude plant** (v1.4) → truer hydraulics (v1.5) → calibrate energy (v1.6) → then biomechanics/visuals.
+Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → **truer continuous hydraulics** (v1.5) → calibrate energy / fatigue-temp (v1.6) → then biomechanics/visuals.
 
 ## Headless harness
 
@@ -62,7 +63,7 @@ Unblack the camera → hold/move like telemetry (v1.3) → **stabilize attitude 
 npm run test:accuracy
 ```
 
-Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.4 adds `attitude_hydro` (roll angle / roll-rate bounds) on top of v1.3 duty-cycle gates.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.5 adds `continuous_field_probe` (jet / bank / depth / smooth wake) and hold/lie V-deficit vs mid-channel ref on top of v1.4 attitude + v1.3 duty-cycle gates.
 
 ## Live demo
 

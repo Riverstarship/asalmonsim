@@ -168,6 +168,10 @@ export class DecisionLayer {
           pitch += this.midColumnPitch(sense) * 0.5;
         }
         yaw += new THREE.Vector3().crossVectors(forward, upstream).y * 0.1;
+        // v1.5: light avoid-abrupt-change bias (turbulence proxy)
+        if (sense.turbulence > 0.55 && sense.holdingLieDist > sense.lieRadius) {
+          yaw += -Math.sign(sense.lateralX || 0.01) * (sense.turbulence - 0.55) * 0.12;
+        }
         rationale =
           this.energy < 0.4
             ? 'Low energy — seeking holding lie'
