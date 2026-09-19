@@ -16,6 +16,8 @@ export interface CoreSimOptions {
   headless?: boolean;
   /** Initial energy 0–1. */
   initialEnergy?: number;
+  /** Harness: lock DecisionLayer mode for metabolic probes. */
+  forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
 }
 
 export interface CoreMetrics {
@@ -27,9 +29,12 @@ export interface CoreMetrics {
   dmg: number;
   /** Upstream DMG accumulated only during migratory modes (cruise/burst). */
   migrateDmg: number;
+  initialEnergy: number;
   minEnergy: number;
   maxEnergy: number;
   endEnergy: number;
+  /** end − initial (negative = net drain). */
+  netEnergyChange: number;
   timeInLie: number;
   timeInHold: number;
   timeInSeekHold: number;
@@ -91,6 +96,10 @@ export interface CoreMetrics {
   /** hold samples used for flow means. */
   holdFlowSamples: number;
   lieFlowSamples: number;
+  /** Mean sensed water temperature °C. */
+  meanTempC: number;
+  /** Gross energy drop max−min over the run (fatigue probe). */
+  energyDrop: number;
 }
 
 /**
@@ -147,6 +156,8 @@ export class CoreSim {
   private lieFlowSum = 0;
   private lieFlowSamples = 0;
   private timeHoldFastCore = 0;
+  private tempSum = 0;
+  private initialEnergy = 1;
   private lastDecision: DecisionOutput | null = null;
   private readonly _rollRight = new THREE.Vector3();
   private readonly _rollForward = new THREE.Vector3();
@@ -167,10 +178,14 @@ export class CoreSim {
       this.decisions.setEnergy(opts.initialEnergy);
       this.fish.energy = opts.initialEnergy;
     }
+    if (opts.forceMode) {
+      this.decisions.setForceMode(opts.forceMode);
+    }
     this.startZ = start.z;
     this.prevZ = start.z;
-    this.minEnergy = this.decisions.getEnergy();
-    this.maxEnergy = this.decisions.getEnergy();
+    this.initialEnergy = this.decisions.getEnergy();
+    this.minEnergy = this.initialEnergy;
+    this.maxEnergy = this.initialEnergy;
   }
 
   /** One sim step — hydro sample, sensors, decisions, integration. */
@@ -204,9 +219,11 @@ export class CoreSim {
       endZ: p.z,
       dmg: p.z - this.startZ,
       migrateDmg: this.migrateDmg,
+      initialEnergy: this.initialEnergy,
       minEnergy: this.minEnergy,
       maxEnergy: this.maxEnergy,
       endEnergy: energy,
+      netEnergyChange: energy - this.initialEnergy,
       timeInLie: this.timeInLie,
       timeInHold: this.timeInHold,
       timeInSeekHold: this.timeInSeekHold,
@@ -259,6 +276,8 @@ export class CoreSim {
       timeHoldFastCore: this.timeHoldFastCore,
       holdFlowSamples: this.holdFlowSamples,
       lieFlowSamples: this.lieFlowSamples,
+      meanTempC: this.steps > 0 ? this.tempSum / this.steps : 0,
+      energyDrop: this.maxEnergy - this.minEnergy,
     };
   }
 
@@ -275,6 +294,7 @@ export class CoreSim {
     const p = this.fish.position;
     this.thrustSum += decision.thrustLevel;
     this.flowSum += snap.flowSpeed;
+    this.tempSum += snap.tempC;
     this.maxThrust = Math.max(this.maxThrust, decision.thrustLevel);
     this.minEnergy = Math.min(this.minEnergy, decision.energy);
     this.maxEnergy = Math.max(this.maxEnergy, decision.energy);
@@ -321,7 +341,7 @@ export class CoreSim {
         this.timeInHold += dt;
         this.holdSlipSum += Math.max(0, -this.fish.hydro.velocity.z);
         this.holdSlipSamples += 1;
-        if (this.fish.groundSpeed < 0.28) this.timeHoldLowSpeed += dt;
+        if (this.fish.groundSpeed < 0.32) this.timeHoldLowSpeed += dt;
         break;
       case 'seek_hold':
         this.timeInSeekHold += dt;

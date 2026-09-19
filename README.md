@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1.5)
+# Atlantic Salmon Migration Simulator (v1.6)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
 
@@ -59,7 +59,8 @@ hydro → env → decisions → cameras → look
 | Fins | `src/fish/Fins.ts` | Wired caudal, dorsal, pectorals, pelvic, anal with amplitude/phase caps |
 | Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials |
 | Env | `src/env/*` | River corridor, **continuous** current field (jet / bank BL / depth / pool & wake gradients), temperature, lie markers |
-| AI | `src/ai/*` | Sense → duty-cycled migrate/hold; mid-column cruise; anticipatory avoidance; lie residency |
+| Metabolism | `src/ai/Metabolism.ts` | v1.6 activity-dominated drain + light temp multiplier (Lennox-informed OOM) |
+| AI | `src/ai/*` | Sense → duty-cycled migrate/hold; mid-column cruise; anticipatory avoidance; lie residency; **v1.6 metabolism** |
 | Cameras | `src/cameras/*` | Follow/chase + fish-eye wide-FOV (direct render) |
 | UI | `src/ui/*` | Camera buttons + toggleable HUD (no accuracy overlay) |
 | Core | `src/sim/CoreSim.ts` | Headless step loop (sense→decide→integrate) |

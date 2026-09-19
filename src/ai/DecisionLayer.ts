@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { SenseSnapshot } from './Sensors';
 import type { SeededRng } from '../util/rng';
+import {
+  drainRate as metabolicDrain,
+  recoverRate as metabolicRecover,
+} from './Metabolism';
 
 export type BehaviorMode = 'hold' | 'cruise' | 'burst' | 'seek_hold';
 
@@ -19,10 +23,11 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer v1.3/v1.4: duty-cycled stepwise ascent; roll cmd mostly automatic.
+ * Decision layer v1.3–v1.6: duty-cycled stepwise ascent; roll cmd mostly automatic.
  * Migratory bout → energy-saving hold (low-V / structure lies) with hysteresis;
  * mid-column preference when migrating; anticipatory bed/bank/surface avoidance;
  * burst only for hard hydraulics / obstacles, then recover in lie.
+ * v1.6: activity-dominated metabolic drain + light temp multiplier (Lennox-informed OOM).
  */
 export class DecisionLayer {
   private energy = 1;
@@ -39,6 +44,8 @@ export class DecisionLayer {
   private readonly rng: SeededRng | null;
   /** Minimum time in a phase before hysteresis allows switching. */
   private readonly minPhaseHold = 3.2;
+  /** Harness-only: lock mode (skips selectMode) for fatigue probes. */
+  private forceMode: BehaviorMode | null = null;
 
   constructor(rng: SeededRng | null = null) {
     this.rng = rng;
@@ -63,14 +70,20 @@ export class DecisionLayer {
     return this.phase;
   }
 
+  /** Headless harness: lock behavior mode for metabolic comparisons. */
+  setForceMode(mode: BehaviorMode | null): void {
+    this.forceMode = mode;
+    if (mode) this.mode = mode;
+  }
+
   private rand(): number {
     return this.rng ? this.rng.next() : Math.random();
   }
 
   private rollBoutTargets(): void {
     // Stepwise: migrate progress bouts, then longer energy-saving holds
-    this.migrateTarget = 7 + this.rand() * 5; // ~7–12 s
-    this.holdTarget = 8 + this.rand() * 7; // ~8–15 s
+    this.migrateTarget = 6.5 + this.rand() * 4.5; // ~6.5–11 s
+    this.holdTarget = 9 + this.rand() * 8; // ~9–17 s
   }
 
   private enterHoldPhase(): void {
@@ -89,7 +102,11 @@ export class DecisionLayer {
     this.burstCooldown = Math.max(0, this.burstCooldown - dt);
     this.phaseElapsed += dt;
 
-    this.selectMode(dt, sense);
+    if (this.forceMode) {
+      this.mode = this.forceMode;
+    } else {
+      this.selectMode(dt, sense);
+    }
     const drain = this.drainRate(sense);
     const recover = this.recoverRate(sense);
     this.energy = THREE.MathUtils.clamp(this.energy - drain * dt + recover * dt, 0.05, 1);
@@ -121,11 +138,11 @@ export class DecisionLayer {
         const slip = Math.max(0, -sense.streamwiseGround);
         const surge = Math.max(0, sense.streamwiseGround);
         let match = inLie
-          ? 0.012 + sense.flowSpeed * 0.2
-          : 0.04 + sense.flowSpeed * 0.45;
-        match += slip * 0.28;
-        match -= Math.min(0.18, surge * 0.45);
-        thrust = THREE.MathUtils.clamp(match, 0.01, 0.48);
+          ? 0.014 + sense.flowSpeed * 0.22
+          : 0.045 + sense.flowSpeed * 0.48;
+        match += slip * 0.34;
+        match -= Math.min(0.2, surge * 0.5);
+        thrust = THREE.MathUtils.clamp(match, 0.01, 0.52);
         if (nearLie && !inLie) {
           yaw += sense.toHoldingLie.dot(right) * 0.18;
         }
@@ -307,7 +324,7 @@ export class DecisionLayer {
         this.phaseElapsed >= this.holdTarget && this.phaseElapsed >= this.minPhaseHold;
       // Minimum lie residency when a lie was used; allow leave if bout done without lie
       const resided =
-        this.lieResidency >= 3 || (this.lieResidency === 0 && boutDone);
+        this.lieResidency >= 3.6 || (this.lieResidency === 0 && boutDone);
       if (recovered && boutDone && resided) {
         this.enterMigratePhase();
         this.lieResidency = 0;
@@ -330,28 +347,12 @@ export class DecisionLayer {
   }
 
   private drainRate(sense: SenseSnapshot): number {
-    const oppose = Math.max(0, sense.flowSpeed - 0.28);
-    const ascent = oppose * 0.055;
-    // Activity-dominated: cruise/burst ≫ hold
-    switch (this.mode) {
-      case 'burst':
-        return 0.38 + ascent * 2.3;
-      case 'cruise':
-        return 0.072 + ascent * 1.05;
-      case 'seek_hold':
-        return 0.055 + ascent * 0.55;
-      case 'hold':
-        return 0.01 + sense.flowSpeed * 0.006;
-      default:
-        return 0.05;
-    }
+    return metabolicDrain(this.mode, sense.flowSpeed, sense.tempC);
   }
 
   private recoverRate(sense: SenseSnapshot): number {
-    const inLie = sense.inLie || sense.holdingLieDist <= sense.lieRadius * 1.25;
-    if (this.mode === 'hold' && inLie) return 0.14;
-    if (this.mode === 'hold') return 0.06;
-    if (this.mode === 'seek_hold' && inLie) return 0.045;
-    return 0.01;
+    const inLie = sense.inLie;
+    const nearLie = sense.holdingLieDist <= sense.lieRadius * 1.35;
+    return metabolicRecover(this.mode, sense.flowSpeed, inLie, nearLie);
   }
 }

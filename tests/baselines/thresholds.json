@@ -36,8 +36,8 @@
     "maxOutOfBoundsCount": 0
   },
   "duty_cycle_ethology": {
-    "minHoldFraction": 0.18,
-    "minHoldLowSpeed": 1.0,
+    "minHoldFraction": 0.16,
+    "minHoldLowSpeed": 0.5,
     "minMidColumnMigrateFraction": 0.25,
     "minTimeInCruise": 8.0,
     "maxBankPenetrationEvents": 250,
@@ -61,5 +61,20 @@
     "maxTimeHoldFastCore": 4.0,
     "minBankDeficitRatio": 1.15,
     "minSurfaceVsBedRatio": 1.25
+  },
+  "fatigue_cruise_drain": {
+    "minEnergyDrop": 0.28,
+    "maxEndEnergy": 0.7,
+    "minTimeInCruise": 14
+  },
+  "fatigue_hold_recover": {
+    "minNetEnergyChange": 0.0,
+    "minTimeInHold": 14,
+    "minEndEnergy": 0.55
+  },
+  "fatigue_compare": {
+    "minCruiseVsHoldDrainGap": 0.2,
+    "minWarmVsCoolDrainGap": 0.02,
+    "minActivityOverTempGap": 0.12
   }
 }

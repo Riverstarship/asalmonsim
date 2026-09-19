@@ -13,6 +13,8 @@ export interface ScenarioDef {
   /** Optional discharge scale override (higher = harder flow). */
   dischargeScale?: number;
   config?: Partial<SimConfig>;
+  /** Harness: lock DecisionLayer mode for metabolic probes. */
+  forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
 }
 
 export const SCENARIOS: ScenarioDef[] = [
@@ -101,6 +103,56 @@ export const SCENARIOS: ScenarioDef[] = [
     initialEnergy: 0.9,
     dischargeScale: 1.05,
   },
+  {
+    id: 'fatigue_cruise_drain',
+    description:
+      'Forced continuous cruise: activity drains energy over wall time (Lennox-informed OOM)',
+    seed: 916,
+    dt: 1 / 30,
+    duration: 16,
+    start: [0.15, 1.9, 14],
+    initialEnergy: 1.0,
+    dischargeScale: 1.0,
+    forceMode: 'cruise',
+    config: { tempOverrideC: 10 },
+  },
+  {
+    id: 'fatigue_hold_recover',
+    description:
+      'Forced hold in structure: low drain / recovery vs cruise over same wall time',
+    seed: 917,
+    dt: 1 / 30,
+    duration: 16,
+    start: [0.2, 1.6, 12.0],
+    initialEnergy: 0.55,
+    dischargeScale: 1.0,
+    forceMode: 'hold',
+    config: { tempOverrideC: 10 },
+  },
+  {
+    id: 'fatigue_temp_warm',
+    description: 'Forced cruise at warm water — modestly higher drain than cool',
+    seed: 918,
+    dt: 1 / 30,
+    duration: 8,
+    start: [0.15, 1.9, 14],
+    initialEnergy: 1.0,
+    dischargeScale: 1.0,
+    forceMode: 'cruise',
+    config: { tempOverrideC: 16 },
+  },
+  {
+    id: 'fatigue_temp_cool',
+    description: 'Forced cruise at cool water — lower drain than warm',
+    seed: 918,
+    dt: 1 / 30,
+    duration: 8,
+    start: [0.15, 1.9, 14],
+    initialEnergy: 1.0,
+    dischargeScale: 1.0,
+    forceMode: 'cruise',
+    config: { tempOverrideC: 6 },
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {
@@ -115,6 +167,7 @@ export function runScenario(def: ScenarioDef): CoreMetrics {
     headless: true,
     startPosition: new THREE.Vector3(...def.start),
     initialEnergy: def.initialEnergy,
+    forceMode: def.forceMode,
   });
   return sim.run(def.duration, def.dt);
 }

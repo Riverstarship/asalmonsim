@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from '../../src/config';
 import { CoreSim, type CoreMetrics } from '../../src/sim/CoreSim';
 import { SCENARIOS, runScenario } from './scenarios';
+import { drainRate as metabolicDrainRate } from '../../src/ai/Metabolism';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
@@ -77,6 +78,21 @@ interface Thresholds {
     maxTimeHoldFastCore: number;
     minBankDeficitRatio: number;
     minSurfaceVsBedRatio: number;
+  };
+  fatigue_cruise_drain: {
+    minEnergyDrop: number;
+    maxEndEnergy: number;
+    minTimeInCruise: number;
+  };
+  fatigue_hold_recover: {
+    minNetEnergyChange: number;
+    minTimeInHold: number;
+    minEndEnergy: number;
+  };
+  fatigue_compare: {
+    minCruiseVsHoldDrainGap: number;
+    minWarmVsCoolDrainGap: number;
+    minActivityOverTempGap: number;
   };
 }
 
@@ -284,6 +300,41 @@ function checkAttitude(m: CoreMetrics, t: Thresholds['attitude_hydro']): Check[]
 }
 
 
+function checkFatigueCruise(m: CoreMetrics, t: Thresholds['fatigue_cruise_drain']): Check[] {
+  const drop = m.initialEnergy - m.endEnergy;
+  return [
+    {
+      ok: drop >= t.minEnergyDrop,
+      msg: `cruise energy drop ${drop.toFixed(3)} >= ${t.minEnergyDrop}`,
+    },
+    {
+      ok: m.endEnergy <= t.maxEndEnergy,
+      msg: `endEnergy ${m.endEnergy.toFixed(3)} <= ${t.maxEndEnergy}`,
+    },
+    {
+      ok: m.timeInCruise >= t.minTimeInCruise,
+      msg: `timeInCruise ${m.timeInCruise.toFixed(2)} >= ${t.minTimeInCruise}`,
+    },
+  ];
+}
+
+function checkFatigueHold(m: CoreMetrics, t: Thresholds['fatigue_hold_recover']): Check[] {
+  return [
+    {
+      ok: m.netEnergyChange >= t.minNetEnergyChange,
+      msg: `netEnergyChange ${m.netEnergyChange.toFixed(3)} >= ${t.minNetEnergyChange}`,
+    },
+    {
+      ok: m.timeInHold >= t.minTimeInHold,
+      msg: `timeInHold ${m.timeInHold.toFixed(2)} >= ${t.minTimeInHold}`,
+    },
+    {
+      ok: m.endEnergy >= t.minEndEnergy,
+      msg: `endEnergy ${m.endEnergy.toFixed(3)} >= ${t.minEndEnergy}`,
+    },
+  ];
+}
+
 function checkContinuous(m: CoreMetrics, t: Thresholds['continuous_hydraulics']): Check[] {
   const holdRatio =
     m.meanHoldMidRefFlow > 1e-6 ? m.meanHoldFlow / m.meanHoldMidRefFlow : 0;
@@ -317,7 +368,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.5 continuous hydraulics)\n');
+  console.log('asalmonsim accuracy harness (v1.6 fatigue / temp)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -425,6 +476,26 @@ function main(): void {
       case 'attitude_hydro':
         checks = checkAttitude(m, thresholds.attitude_hydro);
         break;
+      case 'fatigue_cruise_drain':
+        checks = checkFatigueCruise(m, thresholds.fatigue_cruise_drain);
+        break;
+      case 'fatigue_hold_recover':
+        checks = checkFatigueHold(m, thresholds.fatigue_hold_recover);
+        break;
+      case 'fatigue_temp_warm':
+      case 'fatigue_temp_cool':
+        // Compared pairwise after the loop (activity ≫ modest ΔT)
+        checks = [
+          {
+            ok: m.timeInCruise >= 7,
+            msg: `forced cruise time ${m.timeInCruise.toFixed(2)} >= 7`,
+          },
+          {
+            ok: m.netEnergyChange < -0.12,
+            msg: `net drain ${m.netEnergyChange.toFixed(3)} < -0.12`,
+          },
+        ];
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -442,7 +513,7 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     console.log(
-      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s` +
+      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} dE=${m.netEnergyChange.toFixed(2)} T=${m.meanTempC.toFixed(1)}°C hold=${m.timeInHold.toFixed(1)}s` +
         ` holdFrac=${m.holdFraction.toFixed(2)} midMigFrac=${m.midColumnMigrateFraction.toFixed(2)}` +
         ` lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
         ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}` +
@@ -453,6 +524,58 @@ function main(): void {
     );
 
     summary[def.id] = { ok, metrics: m, checks };
+  }
+
+  // v1.6 comparative: activity drain ≫ modest temperature effect
+  {
+    const th = thresholds.fatigue_compare;
+    const cruise = (summary.fatigue_cruise_drain as { metrics: CoreMetrics } | undefined)?.metrics;
+    const hold = (summary.fatigue_hold_recover as { metrics: CoreMetrics } | undefined)?.metrics;
+    const warm = (summary.fatigue_temp_warm as { metrics: CoreMetrics } | undefined)?.metrics;
+    const cool = (summary.fatigue_temp_cool as { metrics: CoreMetrics } | undefined)?.metrics;
+    const checks: Check[] = [];
+    // Analytical OOM rates at representative mid-channel flow (avoids energy-floor saturation)
+    const flowRef = 0.55;
+    const rateCruise = metabolicDrainRate('cruise', flowRef, 10);
+    const rateHold = metabolicDrainRate('hold', flowRef, 10);
+    const rateWarm = metabolicDrainRate('cruise', flowRef, 16);
+    const rateCool = metabolicDrainRate('cruise', flowRef, 6);
+    const rateActivityGap = rateCruise - rateHold;
+    const rateTempGap = rateWarm - rateCool;
+    checks.push({
+      ok: rateActivityGap > rateTempGap * 1.35,
+      msg: `rate activity ${rateActivityGap.toFixed(4)}/s ≫ temp ${rateTempGap.toFixed(4)}/s (cruise=${rateCruise.toFixed(4)}, hold=${rateHold.toFixed(4)}, warm=${rateWarm.toFixed(4)}, cool=${rateCool.toFixed(4)})`,
+    });
+    if (!cruise || !hold || !warm || !cool) {
+      checks.push({ ok: false, msg: 'missing fatigue scenario metrics for compare' });
+    } else {
+      const cruiseLoss = -cruise.netEnergyChange;
+      const holdLoss = -hold.netEnergyChange; // typically ≤ 0 when recovering
+      const warmLoss = -warm.netEnergyChange;
+      const coolLoss = -cool.netEnergyChange;
+      const activityGap = cruiseLoss - holdLoss;
+      const tempGap = warmLoss - coolLoss;
+      checks.push({
+        ok: activityGap >= th.minCruiseVsHoldDrainGap,
+        msg: `cruise−hold drain gap ${activityGap.toFixed(3)} >= ${th.minCruiseVsHoldDrainGap} (cruiseLoss=${cruiseLoss.toFixed(3)}, holdLoss=${holdLoss.toFixed(3)})`,
+      });
+      // Prefer wall-clock temp gap; if both floored, analytical rateTempGap still required above
+      checks.push({
+        ok: tempGap >= th.minWarmVsCoolDrainGap || rateTempGap >= 0.01,
+        msg: `warm−cool drain gap ${tempGap.toFixed(3)} (wall) / rate ${rateTempGap.toFixed(4)} (T≈${warm.meanTempC.toFixed(1)}/${cool.meanTempC.toFixed(1)}°C)`,
+      });
+      checks.push({
+        ok: activityGap - Math.max(0, tempGap) >= th.minActivityOverTempGap,
+        msg: `activity over temp ${(activityGap - Math.max(0, tempGap)).toFixed(3)} >= ${th.minActivityOverTempGap}`,
+      });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] fatigue_compare`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.fatigue_compare = { ok, checks };
   }
 
   const summaryPath = join(METRICS_DIR, '_summary.json');
