@@ -21,5 +21,12 @@
     "maxAbsX": 6.2,
     "minY": 0.15,
     "maxY": 4.1
+  },
+  "containment": {
+    "maxTimeAboveSurface": 0.05,
+    "maxBankPenetrationEvents": 1200,
+    "maxBedPenetrationEvents": 1200,
+    "maxSurfaceBreachEvents": 1200,
+    "maxOutOfBoundsCount": 0
   }
 }

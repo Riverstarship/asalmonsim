@@ -66,6 +66,18 @@ export const SCENARIOS: ScenarioDef[] = [
     initialEnergy: 0.8,
     dischargeScale: 1.0,
   },
+  {
+    id: 'containment',
+    description:
+      'Hard bed/bank/surface clamp: time above surface ≈ 0; penetration scrapes bounded',
+    seed: 606,
+    dt: 1 / 30,
+    duration: 40,
+    // Start near surface and a bank to stress containment
+    start: [4.8, 3.4, 25],
+    initialEnergy: 0.85,
+    dischargeScale: 1.2,
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {

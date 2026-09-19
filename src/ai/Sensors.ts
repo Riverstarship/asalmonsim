@@ -7,10 +7,12 @@ export interface SenseSnapshot {
   flowSpeed: number;
   shear: number;
   tempC: number;
-  /** Distance to nearest bank (approx). */
+  /** Distance to nearest bank (m), accounting for body radius. */
   bankClearance: number;
-  /** Distance to bed. */
+  /** Distance above bed plane (m), accounting for body radius. */
   bedClearance: number;
+  /** Distance below free surface (m), accounting for body radius. */
+  surfaceClearance: number;
   /** Obstacle ahead (bank/end) proximity 0–1. */
   obstacleAhead: number;
   /** Vector toward nearest holding lie. */
@@ -28,17 +30,21 @@ export interface SenseSnapshot {
  */
 export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const p = fish.position;
+  const r = fish.bodyRadius;
   const flow = river.current.sample(p.x, p.y, p.z);
   const shear = river.current.shearMagnitude(p.x, p.y, p.z);
   const tempC = river.temperature.sample(p.x, p.y, p.z);
-  const halfW = 6;
-  const bankClearance = halfW - Math.abs(p.x);
-  const bedClearance = p.y;
+  const bankClearance = river.bankClearanceAt(p, r);
+  const bedClearance = river.bedClearanceAt(p, r);
+  const surfaceClearance = river.surfaceClearanceAt(p, r);
 
   const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(fish.orientation);
+  // Horizontal probe — vertical clearance is handled via bed/surfaceClearance, not obstacleAhead
   const ahead = p.clone().addScaledVector(forward, 2.5);
-  const { hit } = river.resolveCollision(ahead, 0.2);
-  let obstacleAhead = hit ? 0.8 : 0;
+  ahead.y = p.y;
+  const { bankHit, hit } = river.resolveCollision(ahead, 0.2);
+  const endHit = hit && !bankHit && Math.abs(ahead.x) <= river.bankLimit(0.2) + 0.01;
+  let obstacleAhead = bankHit || endHit ? 0.8 : 0;
   if (bankClearance < 1.2) obstacleAhead = Math.max(obstacleAhead, 1 - bankClearance / 1.2);
 
   const lie = river.nearestHoldingLie(p);
@@ -52,6 +58,7 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
     tempC,
     bankClearance,
     bedClearance,
+    surfaceClearance,
     obstacleAhead,
     toHoldingLie,
     holdingLieDist,

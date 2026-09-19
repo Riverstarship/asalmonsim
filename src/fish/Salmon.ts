@@ -5,6 +5,9 @@ import { Hydrodynamics, type SwimCommand } from './Hydrodynamics';
 import type { RiverEnvironment } from '../env/River';
 import type { DecisionOutput } from '../ai/DecisionLayer';
 
+/** Layer 1 = fish body (hidden from fish-eye camera). */
+export const FISH_LAYER = 1;
+
 export interface SalmonOptions {
   /** Build visual mesh. Default true; false for headless Node runs. */
   visual?: boolean;
@@ -17,6 +20,11 @@ export class Salmon {
   readonly position: THREE.Vector3;
   readonly orientation = new THREE.Quaternion();
 
+  /** Last collision flags (for harness / HUD diagnostics). */
+  lastBedHit = false;
+  lastBankHit = false;
+  lastSurfaceHit = false;
+
   private readonly cmd: SwimCommand = {
     thrustLevel: 0.3,
     pitch: 0,
@@ -26,6 +34,8 @@ export class Salmon {
 
   mode = 'cruise';
   energy = 1;
+  /** Collision body radius (m). */
+  readonly bodyRadius = 0.15;
 
   constructor(start: THREE.Vector3, opts: SalmonOptions = {}) {
     this.fins = new FinController();
@@ -35,6 +45,11 @@ export class Salmon {
     this.group.position.copy(this.position);
     // Face upstream (+Z)
     this.orientation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0);
+
+    // Hide body from fish-eye (camera layer 0 only); follow cam enables layer 1
+    this.group.traverse((obj) => {
+      obj.layers.set(FISH_LAYER);
+    });
   }
 
   applyDecision(decision: DecisionOutput): void {
@@ -62,10 +77,11 @@ export class Salmon {
 
     this.hydro.integrate(dt, forces, this.orientation, this.position);
 
-    const { correction, normal, hit } = river.resolveCollision(
-      this.position,
-      0.15,
-    );
+    const { correction, normal, hit, bedHit, bankHit, surfaceHit } =
+      river.resolveCollision(this.position, this.bodyRadius);
+    this.lastBedHit = bedHit;
+    this.lastBankHit = bankHit;
+    this.lastSurfaceHit = surfaceHit;
     if (hit) {
       this.position.add(correction);
       if (normal.lengthSq() > 0) this.hydro.collide(normal);

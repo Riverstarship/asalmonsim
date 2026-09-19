@@ -13,18 +13,15 @@ export interface HudState {
   timeInLie: number;
 }
 
-export interface AccuracyContent {
-  goal: string;
-  gap: string;
-  strategy: string;
-}
-
+/**
+ * Title + toggleable info/HUD card. Accuracy lives in ACCURACY.md / harness / chat only.
+ */
 export class Overlay {
   readonly root: HTMLDivElement;
   private hudEl: HTMLDivElement;
-  private accuracyEl: HTMLDivElement;
+  private hudVisible = true;
 
-  constructor(parent: HTMLElement, accuracy: AccuracyContent) {
+  constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
     this.root.id = 'ui-root';
     parent.appendChild(this.root);
@@ -40,19 +37,29 @@ export class Overlay {
     this.hudEl.className = 'panel';
     this.root.appendChild(this.hudEl);
 
-    this.accuracyEl = document.createElement('div');
-    this.accuracyEl.id = 'accuracy';
-    this.accuracyEl.className = 'panel';
-    this.accuracyEl.innerHTML = `
-      <h3>Accuracy overlay</h3>
-      <div class="row"><strong>Goal:</strong> ${escapeHtml(accuracy.goal)}</div>
-      <div class="row"><strong>Gap:</strong> ${escapeHtml(accuracy.gap)}</div>
-      <div class="row"><strong>Strategy:</strong> ${escapeHtml(accuracy.strategy)}</div>
-    `;
-    this.root.appendChild(this.accuracyEl);
+    // Collapse HUD by default on narrow viewports for screen space
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) {
+      this.setHudVisible(false);
+    }
+  }
+
+  setHudVisible(visible: boolean): void {
+    this.hudVisible = visible;
+    this.hudEl.classList.toggle('hidden', !visible);
+    this.hudEl.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  }
+
+  toggleHud(): boolean {
+    this.setHudVisible(!this.hudVisible);
+    return this.hudVisible;
+  }
+
+  isHudVisible(): boolean {
+    return this.hudVisible;
   }
 
   updateHud(s: HudState): void {
+    if (!this.hudVisible) return;
     this.hudEl.innerHTML = `
       <div class="label">Behavior</div>
       <div class="value">${escapeHtml(s.mode)} — ${escapeHtml(s.rationale)}</div>

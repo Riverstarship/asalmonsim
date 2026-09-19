@@ -91,30 +91,6 @@ canvas {
   margin-bottom: 6px;
 }
 
-#accuracy {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
-  max-width: 520px;
-}
-
-#accuracy h3 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #8fb89a;
-  margin-bottom: 6px;
-}
-
-#accuracy .row {
-  margin-bottom: 4px;
-}
-
-#accuracy .row strong {
-  color: #a8d4b0;
-}
-
 #title-bar {
   position: absolute;
   top: 12px;
@@ -134,4 +110,25 @@ canvas {
 #title-bar p {
   font-size: 11px;
   color: rgba(150, 180, 160, 0.7);
+}
+
+#hud.hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  #hud {
+    max-width: min(280px, calc(100vw - 24px));
+    font-size: 11px;
+  }
+
+  #title-bar {
+    top: auto;
+    bottom: 10px;
+    max-width: 90%;
+  }
+
+  #title-bar h1 {
+    font-size: 12px;
+  }
 }

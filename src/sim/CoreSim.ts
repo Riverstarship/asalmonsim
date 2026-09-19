@@ -48,6 +48,14 @@ export interface CoreMetrics {
   holdDownstreamSlip: number;
   /** Time-weighted samples used for hold slip mean. */
   holdSlipSamples: number;
+  /** Seconds with surfaceClearance < 0 (above free surface). */
+  timeAboveSurface: number;
+  /** Steps that required bank push-out. */
+  bankPenetrationEvents: number;
+  /** Steps that required bed push-out. */
+  bedPenetrationEvents: number;
+  /** Steps that required surface push-out. */
+  surfaceBreachEvents: number;
 }
 
 /**
@@ -82,6 +90,10 @@ export class CoreSim {
   private reachedLie = false;
   private holdSlipSum = 0;
   private holdSlipSamples = 0;
+  private timeAboveSurface = 0;
+  private bankPenetrationEvents = 0;
+  private bedPenetrationEvents = 0;
+  private surfaceBreachEvents = 0;
   private lastDecision: DecisionOutput | null = null;
 
   constructor(opts: CoreSimOptions = {}) {
@@ -154,6 +166,10 @@ export class CoreSim {
       holdDownstreamSlip:
         this.holdSlipSamples > 0 ? this.holdSlipSum / this.holdSlipSamples : 0,
       holdSlipSamples: this.holdSlipSamples,
+      timeAboveSurface: this.timeAboveSurface,
+      bankPenetrationEvents: this.bankPenetrationEvents,
+      bedPenetrationEvents: this.bedPenetrationEvents,
+      surfaceBreachEvents: this.surfaceBreachEvents,
     };
   }
 
@@ -187,15 +203,31 @@ export class CoreSim {
       this.nanCount += 1;
     }
 
-    // Rough river corridor bounds (width/2≈6, depth≈4, length≈80)
-    if (Math.abs(p.x) > 7 || p.y < -0.5 || p.y > 5 || p.z < -2 || p.z > 85) {
+    // Post-containment: soft corridor check (should stay near zero with hard walls)
+    const r = this.fish.bodyRadius;
+    if (
+      this.river.bankClearanceAt(p, r) < -0.02 ||
+      this.river.bedClearanceAt(p, r) < -0.02 ||
+      this.river.surfaceClearanceAt(p, r) < -0.02 ||
+      p.z < -2 ||
+      p.z > 85
+    ) {
       this.outOfBoundsCount += 1;
+    }
+
+    // Penetration events are counted from the collision resolve that just ran
+    if (this.fish.lastBankHit) this.bankPenetrationEvents += 1;
+    if (this.fish.lastBedHit) this.bedPenetrationEvents += 1;
+    if (this.fish.lastSurfaceHit) this.surfaceBreachEvents += 1;
+
+    // Post-containment: residual time above free surface (≈0 with hard clamp)
+    if (this.river.surfaceClearanceAt(p, r) < -1e-4) {
+      this.timeAboveSurface += dt;
     }
 
     switch (decision.mode) {
       case 'hold':
         this.timeInHold += dt;
-        // Mean downstream slip while holding (ignore brief spikes at mode entry)
         this.holdSlipSum += Math.max(0, -this.fish.hydro.velocity.z);
         this.holdSlipSamples += 1;
         break;

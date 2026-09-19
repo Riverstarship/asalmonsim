@@ -16,6 +16,18 @@ export interface RiverOptions {
   visual?: boolean;
 }
 
+export interface CollisionResult {
+  correction: THREE.Vector3;
+  normal: THREE.Vector3;
+  hit: boolean;
+  /** True if center was below bed plane (before push-out). */
+  bedHit: boolean;
+  /** True if center was past a bank (before push-out). */
+  bankHit: boolean;
+  /** True if center was at/above free surface (before push-out). */
+  surfaceHit: boolean;
+}
+
 /**
  * Spatial river corridor and environment fields.
  * Visual mesh is optional so Node accuracy runs stay headless.
@@ -153,49 +165,92 @@ export class RiverEnvironment {
     }
   }
 
-  /** Clamp / collide against bed and banks. Returns penetration correction. */
+  /** Nominal bed elevation under the fish (flat collision bed). */
+  bedElevation(_x: number, _z: number): number {
+    return 0.25;
+  }
+
+  /** Free-surface elevation (m). */
+  surfaceElevation(): number {
+    return RIVER.depth - 0.15;
+  }
+
+  /** Lateral half-width usable by fish center given body radius. */
+  bankLimit(radius: number): number {
+    return RIVER.width * 0.5 - radius - 0.35;
+  }
+
+  /** Clearance above bed plane (m). */
+  bedClearanceAt(position: THREE.Vector3, radius: number): number {
+    return position.y - this.bedElevation(position.x, position.z) - radius;
+  }
+
+  /** Clearance below free surface (m). */
+  surfaceClearanceAt(position: THREE.Vector3, radius: number): number {
+    return this.surfaceElevation() - radius - position.y;
+  }
+
+  /** Clearance to nearest bank (m). */
+  bankClearanceAt(position: THREE.Vector3, radius: number): number {
+    return this.bankLimit(radius) - Math.abs(position.x);
+  }
+
+  /**
+   * Hard containment against bed, banks, and free surface.
+   * Push-out + unit normals for killing inward velocity.
+   */
   resolveCollision(
     position: THREE.Vector3,
     radius: number,
-  ): { correction: THREE.Vector3; normal: THREE.Vector3; hit: boolean } {
+  ): CollisionResult {
     const correction = new THREE.Vector3();
     const normal = new THREE.Vector3();
     let hit = false;
-    const halfW = RIVER.width * 0.5;
-    const minY = 0.25 + radius;
-    const maxY = RIVER.depth - radius - 0.15;
+    let bedHit = false;
+    let bankHit = false;
+    let surfaceHit = false;
+
+    const minY = this.bedElevation(position.x, position.z) + radius;
+    const maxY = this.surfaceElevation() - radius;
+    const maxX = this.bankLimit(radius);
 
     if (position.y < minY) {
       correction.y += minY - position.y;
       normal.y += 1;
       hit = true;
+      bedHit = true;
     }
     if (position.y > maxY) {
       correction.y += maxY - position.y;
       normal.y -= 1;
       hit = true;
+      surfaceHit = true;
     }
-    const maxX = halfW - radius - 0.3;
     if (position.x > maxX) {
       correction.x += maxX - position.x;
       normal.x -= 1;
       hit = true;
+      bankHit = true;
     }
     if (position.x < -maxX) {
       correction.x += -maxX - position.x;
       normal.x += 1;
       hit = true;
+      bankHit = true;
     }
     if (position.z < 2) {
       correction.z += 2 - position.z;
+      normal.z += 1;
       hit = true;
     }
     if (position.z > RIVER.length - 2) {
       correction.z += RIVER.length - 2 - position.z;
+      normal.z -= 1;
+      hit = true;
     }
 
     if (normal.lengthSq() > 0) normal.normalize();
-    return { correction, normal, hit };
+    return { correction, normal, hit, bedHit, bankHit, surfaceHit };
   }
 
   nearestHoldingLie(pos: THREE.Vector3): HoldingLie {

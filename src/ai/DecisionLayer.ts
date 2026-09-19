@@ -15,7 +15,7 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer v1.1: sense → hold / cruise / burst / seek holding lie.
+ * Decision layer v1.2a: sense → hold / cruise / burst / seek holding lie.
  * Prefers lies when energy low / flow high; weak upstream rheotaxis/homing;
  * light fatigue curves (ascent costs scale with opposing flow).
  */
@@ -79,7 +79,7 @@ export class DecisionLayer {
           yaw += sense.toHoldingLie.dot(right) * 0.22;
           pitch += Math.sign(sense.toHoldingLie.y) * 0.1;
         }
-        pitch += (0.7 - sense.bedClearance) * 0.05;
+        pitch += (0.55 - sense.bedClearance) * 0.05;
         rationale =
           sense.holdingLieDist < sense.lieRadius
             ? 'Holding in low-shear lie'
@@ -95,7 +95,7 @@ export class DecisionLayer {
           );
           yaw += towardCentre * (1.2 - sense.bankClearance) * 0.35;
         }
-        pitch += (1.2 - sense.bedClearance) * 0.04;
+        pitch += (0.75 - sense.bedClearance) * 0.04;
         rationale = 'Steady upstream cruise (rheotaxis)';
         break;
       }
@@ -134,6 +134,14 @@ export class DecisionLayer {
       if (this.mode !== 'burst' && sense.flowSpeed > 0.7) {
         thrust = Math.max(thrust, Math.min(0.75, 0.5 + this.energy * 0.3));
       }
+    }
+
+    // Light pitch bias away from free surface / bed (trivial; hard containment is primary)
+    if (sense.surfaceClearance < 0.45) {
+      pitch -= (0.45 - sense.surfaceClearance) * 0.22;
+    }
+    if (sense.bedClearance < 0.28) {
+      pitch += (0.28 - sense.bedClearance) * 0.18;
     }
 
     const tempErr = sense.tempC - this.preferredTemp;

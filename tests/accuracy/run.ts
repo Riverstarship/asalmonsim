@@ -38,6 +38,13 @@ interface Thresholds {
     minY: number;
     maxY: number;
   };
+  containment: {
+    maxTimeAboveSurface: number;
+    maxBankPenetrationEvents: number;
+    maxBedPenetrationEvents: number;
+    maxSurfaceBreachEvents: number;
+    maxOutOfBoundsCount: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -122,6 +129,31 @@ function checkStability(m: CoreMetrics, t: Thresholds['stability']): Check[] {
   ];
 }
 
+function checkContainment(m: CoreMetrics, t: Thresholds['containment']): Check[] {
+  return [
+    {
+      ok: m.timeAboveSurface <= t.maxTimeAboveSurface,
+      msg: `timeAboveSurface ${m.timeAboveSurface.toFixed(3)}s <= ${t.maxTimeAboveSurface}`,
+    },
+    {
+      ok: m.bankPenetrationEvents <= t.maxBankPenetrationEvents,
+      msg: `bankPenetrationEvents ${m.bankPenetrationEvents} <= ${t.maxBankPenetrationEvents}`,
+    },
+    {
+      ok: m.bedPenetrationEvents <= t.maxBedPenetrationEvents,
+      msg: `bedPenetrationEvents ${m.bedPenetrationEvents} <= ${t.maxBedPenetrationEvents}`,
+    },
+    {
+      ok: m.surfaceBreachEvents <= t.maxSurfaceBreachEvents,
+      msg: `surfaceBreachEvents ${m.surfaceBreachEvents} <= ${t.maxSurfaceBreachEvents}`,
+    },
+    {
+      ok: m.outOfBoundsCount <= t.maxOutOfBoundsCount,
+      msg: `outOfBoundsCount ${m.outOfBoundsCount} <= ${t.maxOutOfBoundsCount}`,
+    },
+  ];
+}
+
 function main(): void {
   mkdirSync(METRICS_DIR, { recursive: true });
   if (!existsSync(BASELINE_PATH)) {
@@ -173,6 +205,9 @@ function main(): void {
       case 'stability':
         checks = checkStability(m, thresholds.stability);
         break;
+      case 'containment':
+        checks = checkContainment(m, thresholds.containment);
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -185,7 +220,8 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     console.log(
-      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s`,
+      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
+        ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };

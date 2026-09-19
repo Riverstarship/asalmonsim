@@ -115,12 +115,20 @@ export class Hydrodynamics {
     orientation.multiply(dq).normalize();
   }
 
-  /** Reflect / damp velocity on collision normal. */
+  /**
+   * Hard containment: kill inward normal velocity (no bounce through walls).
+   * Light tangential damp only on bed/surface contacts so bank scrapes
+   * do not erase upstream progress.
+   */
   collide(normal: THREE.Vector3): void {
     const vn = this.velocity.dot(normal);
     if (vn < 0) {
-      this.velocity.addScaledVector(normal, -1.4 * vn);
-      this.velocity.multiplyScalar(0.7);
+      this.velocity.addScaledVector(normal, -vn);
+    }
+    if (Math.abs(normal.y) > 0.55) {
+      const nComp = normal.clone().multiplyScalar(this.velocity.dot(normal));
+      const tang = this.velocity.clone().sub(nComp);
+      this.velocity.copy(nComp.addScaledVector(tang, 0.92));
     }
   }
 }

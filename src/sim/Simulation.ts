@@ -2,16 +2,11 @@ import * as THREE from 'three';
 import { DEFAULT_CONFIG } from '../config';
 import { CoreSim } from './CoreSim';
 import { FollowCamera } from '../cameras/FollowCamera';
-import { FishEyeCamera, type CameraMode } from '../cameras/FishEyeCamera';
+import { FishEyeCamera, UNDERWATER_TINT, type CameraMode } from '../cameras/FishEyeCamera';
+import { FISH_LAYER } from '../fish/Salmon';
 import { Overlay } from '../ui/Overlay';
 import { Controls } from '../ui/Controls';
 import { sense } from '../ai/Sensors';
-
-const ACCURACY = {
-  goal: 'Adult Salmo salar ascent with headless-checked hold/seek/DMG/fatigue.',
-  gap: 'No real bathymetry/CFD; thrust not force-plate fitted; homing is weak bias only.',
-  strategy: 'Harness gates regressions; next: site current maps + calibrated fatigue.',
-};
 
 export class Simulation {
   private renderer: THREE.WebGLRenderer;
@@ -33,14 +28,15 @@ export class Simulation {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h);
+    this.renderer.setClearColor(UNDERWATER_TINT, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b1a24);
-    this.scene.fog = new THREE.FogExp2(0x0b1a24, 0.025);
+    this.scene.background = new THREE.Color(UNDERWATER_TINT);
+    this.scene.fog = new THREE.FogExp2(UNDERWATER_TINT, 0.025);
 
     this.setupLights();
 
@@ -54,12 +50,19 @@ export class Simulation {
     this.scene.add(this.core.fish.group);
 
     this.follow = new FollowCamera(w / h);
+    this.follow.camera.layers.enable(0);
+    this.follow.camera.layers.enable(FISH_LAYER);
     this.fishEye = new FishEyeCamera(w / h, w, h);
 
-    this.overlay = new Overlay(container, ACCURACY);
-    new Controls(this.overlay.root, (mode) => {
-      this.cameraMode = mode;
-    });
+    this.overlay = new Overlay(container);
+    new Controls(
+      this.overlay.root,
+      (mode) => {
+        this.cameraMode = mode;
+      },
+      () => this.overlay.toggleHud(),
+      this.overlay.isHudVisible(),
+    );
 
     window.addEventListener('resize', () => this.onResize());
   }
