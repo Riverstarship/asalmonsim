@@ -61,6 +61,15 @@ interface Thresholds {
     maxSurfaceBreachEvents: number;
     maxOutOfBoundsCount: number;
   };
+  attitude_hydro: {
+    maxAbsRollDeg: number;
+    maxMeanAbsRollDeg: number;
+    minTimeRollUnder45Fraction: number;
+    maxMeanAbsRollRate: number;
+    maxRollRateVariance: number;
+    maxAbsRollRate: number;
+    maxNanCount: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -231,6 +240,41 @@ function checkDuty(m: CoreMetrics, t: Thresholds['duty_cycle_ethology']): Check[
   ];
 }
 
+function checkAttitude(m: CoreMetrics, t: Thresholds['attitude_hydro']): Check[] {
+  const maxDeg = (m.maxAbsRoll * 180) / Math.PI;
+  const meanDeg = (m.meanAbsRoll * 180) / Math.PI;
+  return [
+    {
+      ok: maxDeg <= t.maxAbsRollDeg,
+      msg: `maxAbsRoll ${maxDeg.toFixed(1)}° <= ${t.maxAbsRollDeg}°`,
+    },
+    {
+      ok: meanDeg <= t.maxMeanAbsRollDeg,
+      msg: `meanAbsRoll ${meanDeg.toFixed(1)}° <= ${t.maxMeanAbsRollDeg}°`,
+    },
+    {
+      ok: m.timeRollUnder45Fraction >= t.minTimeRollUnder45Fraction,
+      msg: `timeRollUnder45Fraction ${m.timeRollUnder45Fraction.toFixed(3)} >= ${t.minTimeRollUnder45Fraction}`,
+    },
+    {
+      ok: m.meanAbsRollRate <= t.maxMeanAbsRollRate,
+      msg: `meanAbsRollRate ${m.meanAbsRollRate.toFixed(3)} <= ${t.maxMeanAbsRollRate}`,
+    },
+    {
+      ok: m.rollRateVariance <= t.maxRollRateVariance,
+      msg: `rollRateVariance ${m.rollRateVariance.toFixed(3)} <= ${t.maxRollRateVariance}`,
+    },
+    {
+      ok: m.maxAbsRollRate <= t.maxAbsRollRate,
+      msg: `maxAbsRollRate ${m.maxAbsRollRate.toFixed(3)} <= ${t.maxAbsRollRate}`,
+    },
+    {
+      ok: m.nanCount <= t.maxNanCount,
+      msg: `nanCount ${m.nanCount} <= ${t.maxNanCount}`,
+    },
+  ];
+}
+
 function main(): void {
   mkdirSync(METRICS_DIR, { recursive: true });
   if (!existsSync(BASELINE_PATH)) {
@@ -241,7 +285,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.3 ethology)\n');
+  console.log('asalmonsim accuracy harness (v1.4 attitude hydro)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -287,6 +331,9 @@ function main(): void {
       case 'duty_cycle_ethology':
         checks = checkDuty(m, thresholds.duty_cycle_ethology);
         break;
+      case 'attitude_hydro':
+        checks = checkAttitude(m, thresholds.attitude_hydro);
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -302,7 +349,9 @@ function main(): void {
       `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s` +
         ` holdFrac=${m.holdFraction.toFixed(2)} midMigFrac=${m.midColumnMigrateFraction.toFixed(2)}` +
         ` lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
-        ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}`,
+        ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}` +
+        ` rollMax=${((m.maxAbsRoll * 180) / Math.PI).toFixed(1)}°` +
+        ` |ωr|=${m.meanAbsRollRate.toFixed(3)}`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };

@@ -90,6 +90,17 @@ export const SCENARIOS: ScenarioDef[] = [
     initialEnergy: 0.85,
     dischargeScale: 0.95,
   },
+  {
+    id: 'attitude_hydro',
+    description:
+      'Dorsal-up attitude plant: |roll| bounded, roll-rate low — no sustained corkscrew',
+    seed: 814,
+    dt: 1 / 30,
+    duration: 75,
+    start: [0.2, 1.8, 10],
+    initialEnergy: 0.9,
+    dischargeScale: 1.05,
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {

@@ -1,7 +1,7 @@
 {
   "hold_midchannel": {
     "maxHoldDownstreamSlip": 0.75,
-    "minTimeInHold": 8.0,
+    "minTimeInHold": 7.0,
     "minHoldFraction": 0.3,
     "minHoldLowSpeed": 1.5
   },
@@ -37,12 +37,21 @@
   },
   "duty_cycle_ethology": {
     "minHoldFraction": 0.18,
-    "minHoldLowSpeed": 1.5,
+    "minHoldLowSpeed": 1.0,
     "minMidColumnMigrateFraction": 0.25,
     "minTimeInCruise": 8.0,
     "maxBankPenetrationEvents": 250,
     "maxBedPenetrationEvents": 550,
     "maxSurfaceBreachEvents": 450,
     "maxOutOfBoundsCount": 0
+  },
+  "attitude_hydro": {
+    "maxAbsRollDeg": 15,
+    "maxMeanAbsRollDeg": 5,
+    "minTimeRollUnder45Fraction": 0.98,
+    "maxMeanAbsRollRate": 0.15,
+    "maxRollRateVariance": 0.05,
+    "maxAbsRollRate": 0.4,
+    "maxNanCount": 0
   }
 }

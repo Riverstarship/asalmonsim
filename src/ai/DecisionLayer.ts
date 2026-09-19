@@ -19,7 +19,7 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer v1.3: duty-cycled stepwise ascent.
+ * Decision layer v1.3/v1.4: duty-cycled stepwise ascent; roll cmd mostly automatic.
  * Migratory bout → energy-saving hold (low-V / structure lies) with hysteresis;
  * mid-column preference when migrating; anticipatory bed/bank/surface avoidance;
  * burst only for hard hydraulics / obstacles, then recover in lie.
@@ -211,14 +211,16 @@ export class DecisionLayer {
       thrust = Math.min(thrust, 0.35);
     }
 
-    const roll = -yaw * 0.4;
+    // v1.4: roll mostly automatic via dorsal-up hydro — AI mainly yaw/pitch/thrust
+    const yawCmd = THREE.MathUtils.clamp(yaw, -1, 1);
+    const roll = THREE.MathUtils.clamp(-yawCmd * 0.05, -0.08, 0.08);
 
     return {
       mode: this.mode,
       thrustLevel: THREE.MathUtils.clamp(thrust, 0.05, 1),
       pitch: THREE.MathUtils.clamp(pitch, -1, 1),
-      yaw: THREE.MathUtils.clamp(yaw, -1, 1),
-      roll: THREE.MathUtils.clamp(roll, -1, 1),
+      yaw: yawCmd,
+      roll,
       energy: this.energy,
       rationale,
       phase: this.phase,

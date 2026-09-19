@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DEFAULT_CONFIG, type SimConfig } from '../config';
 import { RiverEnvironment } from '../env/River';
 import { Salmon } from '../fish/Salmon';
+import { Hydrodynamics } from '../fish/Hydrodynamics';
 import { DecisionLayer, type DecisionOutput } from '../ai/DecisionLayer';
 import { sense, type SenseSnapshot } from '../ai/Sensors';
 import { SeededRng } from '../util/rng';
@@ -67,6 +68,18 @@ export interface CoreMetrics {
   bedPenetrationEvents: number;
   /** Steps that required surface push-out. */
   surfaceBreachEvents: number;
+  /** Peak |roll| angle (rad) from quaternion (belly-down error about forward). */
+  maxAbsRoll: number;
+  /** Mean |roll| angle (rad). */
+  meanAbsRoll: number;
+  /** Fraction of time with |roll| under 45°. */
+  timeRollUnder45Fraction: number;
+  /** Mean |ω_roll| (rad/s). */
+  meanAbsRollRate: number;
+  /** Variance of ω_roll (rad²/s²). */
+  rollRateVariance: number;
+  /** Peak |ω_roll| (rad/s). */
+  maxAbsRollRate: number;
 }
 
 /**
@@ -110,7 +123,19 @@ export class CoreSim {
   private bankPenetrationEvents = 0;
   private bedPenetrationEvents = 0;
   private surfaceBreachEvents = 0;
+  private absRollSum = 0;
+  private maxAbsRoll = 0;
+  private timeRollUnder45 = 0;
+  private absRollRateSum = 0;
+  private maxAbsRollRate = 0;
+  private rollRateSum = 0;
+  private rollRateSqSum = 0;
   private lastDecision: DecisionOutput | null = null;
+  private readonly _rollRight = new THREE.Vector3();
+  private readonly _rollForward = new THREE.Vector3();
+  private readonly _rollUp = new THREE.Vector3();
+  private readonly _rollWorldUp = new THREE.Vector3(0, 1, 0);
+  private readonly _rollTmp = new THREE.Vector3();
 
   constructor(opts: CoreSimOptions = {}) {
     const cfg = opts.config ?? DEFAULT_CONFIG;
@@ -195,6 +220,19 @@ export class CoreSim {
       bankPenetrationEvents: this.bankPenetrationEvents,
       bedPenetrationEvents: this.bedPenetrationEvents,
       surfaceBreachEvents: this.surfaceBreachEvents,
+      maxAbsRoll: this.maxAbsRoll,
+      meanAbsRoll: this.steps > 0 ? this.absRollSum / this.steps : 0,
+      timeRollUnder45Fraction: this.time > 0 ? this.timeRollUnder45 / this.time : 1,
+      meanAbsRollRate: this.steps > 0 ? this.absRollRateSum / this.steps : 0,
+      rollRateVariance:
+        this.steps > 1
+          ? Math.max(
+              0,
+              this.rollRateSqSum / this.steps -
+                (this.rollRateSum / this.steps) ** 2,
+            )
+          : 0,
+      maxAbsRollRate: this.maxAbsRollRate,
     };
   }
 
@@ -284,5 +322,28 @@ export class CoreSim {
       this.reachedLie = true;
     }
     if (snap.holdingLieDist < lie.radius * 1.5) this.reachedLie = true;
+
+    // Attitude / roll stability (v1.4)
+    const roll = this.signedRollRad();
+    const absRoll = Math.abs(roll);
+    this.absRollSum += absRoll;
+    this.maxAbsRoll = Math.max(this.maxAbsRoll, absRoll);
+    if (absRoll < Math.PI / 4) this.timeRollUnder45 += dt;
+    const wr = this.fish.hydro.angularVelocity.z;
+    const absWr = Math.abs(wr);
+    this.absRollRateSum += absWr;
+    this.maxAbsRollRate = Math.max(this.maxAbsRollRate, absWr);
+    this.rollRateSum += wr;
+    this.rollRateSqSum += wr * wr;
+  }
+
+  private signedRollRad(): number {
+    return Hydrodynamics.signedRollRad(this.fish.orientation, {
+      forward: this._rollForward,
+      up: this._rollUp,
+      worldUp: this._rollWorldUp,
+      wu: this._rollTmp,
+      tmp: this._rollRight,
+    });
   }
 }
