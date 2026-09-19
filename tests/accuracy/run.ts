@@ -94,6 +94,15 @@ interface Thresholds {
     minWarmVsCoolDrainGap: number;
     minActivityOverTempGap: number;
   };
+  undulatory_gait: {
+    minCruiseWavePower: number;
+    maxHoldWavePower: number;
+    minCruiseOverHoldPowerRatio: number;
+    minCruiseWaveAmplitude: number;
+    minCruiseWaveFrequency: number;
+    minCruiseWaveThrust: number;
+    minThrustWaveCorrelation: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -358,6 +367,54 @@ function checkContinuous(m: CoreMetrics, t: Thresholds['continuous_hydraulics'])
   return checks;
 }
 
+
+function checkUndulatoryCruise(m: CoreMetrics, t: Thresholds['undulatory_gait']): Check[] {
+  // Correlation proxy: E[thrust·power] / (E[thrust]·E[power] + ε) ≥ threshold when both vary together
+  const meanT = m.meanThrustLevel;
+  const meanP = m.meanWavePower;
+  const corrProxy =
+    meanT > 1e-6 && meanP > 1e-6 ? m.thrustWaveCov / (meanT * meanP) : 0;
+  return [
+    {
+      ok: m.meanWavePower >= t.minCruiseWavePower,
+      msg: `meanWavePower ${m.meanWavePower.toFixed(3)} >= ${t.minCruiseWavePower}`,
+    },
+    {
+      ok: m.meanWaveAmplitude >= t.minCruiseWaveAmplitude,
+      msg: `meanWaveAmplitude ${m.meanWaveAmplitude.toFixed(4)}m >= ${t.minCruiseWaveAmplitude}`,
+    },
+    {
+      ok: m.meanWaveFrequency >= t.minCruiseWaveFrequency,
+      msg: `meanWaveFrequency ${m.meanWaveFrequency.toFixed(2)}Hz >= ${t.minCruiseWaveFrequency}`,
+    },
+    {
+      ok: m.meanWaveThrust >= t.minCruiseWaveThrust,
+      msg: `meanWaveThrust ${m.meanWaveThrust.toFixed(1)}N >= ${t.minCruiseWaveThrust}`,
+    },
+    {
+      ok: corrProxy >= t.minThrustWaveCorrelation,
+      msg: `thrust↔wave corr proxy ${corrProxy.toFixed(3)} >= ${t.minThrustWaveCorrelation}`,
+    },
+    {
+      ok: m.timeInCruise >= 10,
+      msg: `forced cruise time ${m.timeInCruise.toFixed(2)} >= 10`,
+    },
+  ];
+}
+
+function checkUndulatoryHold(m: CoreMetrics, t: Thresholds['undulatory_gait']): Check[] {
+  return [
+    {
+      ok: m.meanWavePower <= t.maxHoldWavePower,
+      msg: `hold meanWavePower ${m.meanWavePower.toFixed(3)} <= ${t.maxHoldWavePower}`,
+    },
+    {
+      ok: m.timeInHold >= 10,
+      msg: `forced hold time ${m.timeInHold.toFixed(2)} >= 10`,
+    },
+  ];
+}
+
 function main(): void {
   mkdirSync(METRICS_DIR, { recursive: true });
   if (!existsSync(BASELINE_PATH)) {
@@ -368,7 +425,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.6 fatigue / temp)\n');
+  console.log('asalmonsim accuracy harness (v1.7 undulatory biomechanics)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -496,6 +553,12 @@ function main(): void {
           },
         ];
         break;
+      case 'undulatory_gait_cruise':
+        checks = checkUndulatoryCruise(m, thresholds.undulatory_gait);
+        break;
+      case 'undulatory_gait_hold':
+        checks = checkUndulatoryHold(m, thresholds.undulatory_gait);
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -520,7 +583,9 @@ function main(): void {
         ` rollMax=${((m.maxAbsRoll * 180) / Math.PI).toFixed(1)}°` +
         ` |ωr|=${m.meanAbsRollRate.toFixed(3)}` +
         ` holdV=${m.meanHoldFlow.toFixed(3)} midRef=${m.meanHoldMidRefFlow.toFixed(3)}` +
-        ` fastCore=${m.timeHoldFastCore.toFixed(1)}s`,
+        ` fastCore=${m.timeHoldFastCore.toFixed(1)}s` +
+        ` waveP=${m.meanWavePower.toFixed(3)} A=${m.meanWaveAmplitude.toFixed(3)} f=${m.meanWaveFrequency.toFixed(2)}Hz` +
+        ` Fwave=${m.meanWaveThrust.toFixed(1)}N`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };
@@ -576,6 +641,53 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     summary.fatigue_compare = { ok, checks };
+  }
+
+  // v1.7 comparative: cruise wave power ≫ hold; thrust tracks wave
+  {
+    const th = thresholds.undulatory_gait;
+    const cruise = (summary.undulatory_gait_cruise as { metrics: CoreMetrics } | undefined)?.metrics;
+    const hold = (summary.undulatory_gait_hold as { metrics: CoreMetrics } | undefined)?.metrics;
+    const checks: Check[] = [];
+    if (!cruise || !hold) {
+      checks.push({ ok: false, msg: 'missing undulatory scenario metrics for compare' });
+    } else {
+      const ratio =
+        hold.meanWavePower > 1e-8
+          ? cruise.meanWavePower / hold.meanWavePower
+          : cruise.meanWavePower > th.minCruiseWavePower
+            ? 999
+            : 0;
+      checks.push({
+        ok: cruise.meanWavePower >= th.minCruiseWavePower,
+        msg: `cruise wavePower ${cruise.meanWavePower.toFixed(3)} >= ${th.minCruiseWavePower}`,
+      });
+      checks.push({
+        ok: hold.meanWavePower <= th.maxHoldWavePower,
+        msg: `hold wavePower ${hold.meanWavePower.toFixed(3)} <= ${th.maxHoldWavePower}`,
+      });
+      checks.push({
+        ok: ratio >= th.minCruiseOverHoldPowerRatio,
+        msg: `cruise/hold wavePower ratio ${ratio.toFixed(2)} >= ${th.minCruiseOverHoldPowerRatio}`,
+      });
+      checks.push({
+        ok: cruise.meanWaveThrust > hold.meanWaveThrust * 1.8,
+        msg: `cruise thrust ${cruise.meanWaveThrust.toFixed(1)}N > hold ${hold.meanWaveThrust.toFixed(1)}N ×1.8`,
+      });
+      // Attitude still green on gait runs
+      const rollDeg = (cruise.maxAbsRoll * 180) / Math.PI;
+      checks.push({
+        ok: rollDeg <= 15,
+        msg: `gait cruise maxAbsRoll ${rollDeg.toFixed(1)}° <= 15° (v1.4 preserved)`,
+      });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] undulatory_compare`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.undulatory_compare = { ok, checks };
   }
 
   const summaryPath = join(METRICS_DIR, '_summary.json');

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { FinController } from './Fins';
-import { createSalmonMesh } from './Mesh';
+import { createSalmonMesh, applyBodyWaveBend } from './Mesh';
 import { Hydrodynamics, type SwimCommand } from './Hydrodynamics';
+import { BodyWave } from './BodyWave';
 import type { RiverEnvironment } from '../env/River';
 import type { DecisionOutput } from '../ai/DecisionLayer';
 
@@ -17,6 +18,8 @@ export class Salmon {
   readonly group: THREE.Group;
   readonly fins: FinController;
   readonly hydro = new Hydrodynamics();
+  /** Carangiform traveling-wave envelope (drives thrust + visual bend). */
+  readonly wave = new BodyWave();
   readonly position: THREE.Vector3;
   readonly orientation = new THREE.Quaternion();
 
@@ -32,6 +35,8 @@ export class Salmon {
     roll: 0,
   };
 
+  private readonly hasVisual: boolean;
+
   mode = 'cruise';
   energy = 1;
   /** Collision body radius (m). */
@@ -40,6 +45,7 @@ export class Salmon {
   constructor(start: THREE.Vector3, opts: SalmonOptions = {}) {
     this.fins = new FinController();
     const visual = opts.visual !== false;
+    this.hasVisual = visual;
     this.group = visual ? createSalmonMesh(this.fins) : new THREE.Group();
     this.position = start.clone();
     this.group.position.copy(this.position);
@@ -68,11 +74,15 @@ export class Salmon {
       this.position.z,
     );
 
+    const intensity = this.cmd.thrustLevel;
+    // Wave first — hydro thrust comes from the envelope, not a pure scalar
+    this.wave.update(dt, intensity, this.mode);
+
     const forces = this.hydro.computeForces(
       this.orientation,
       water,
       this.cmd,
-      this.fins.caudalAngle,
+      this.wave,
     );
 
     this.hydro.integrate(dt, forces, this.orientation, this.position);
@@ -87,11 +97,13 @@ export class Salmon {
       if (normal.lengthSq() > 0) this.hydro.collide(normal);
     }
 
-    const intensity = this.cmd.thrustLevel;
-    this.fins.update(dt, intensity, this.hydro.angularVelocity.y, this.mode);
+    this.fins.update(dt, intensity, this.hydro.angularVelocity.y, this.mode, this.wave);
 
     this.group.position.copy(this.position);
     this.group.quaternion.copy(this.orientation);
+    if (this.hasVisual) {
+      applyBodyWaveBend(this.group, this.wave);
+    }
   }
 
   /** Ground-relative speed (m/s). */

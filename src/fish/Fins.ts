@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { BodyWave } from './BodyWave';
 
 export type FinId = 'caudal' | 'dorsal' | 'pectoralL' | 'pectoralR' | 'pelvicL' | 'pelvicR' | 'anal';
 
@@ -19,7 +20,7 @@ export interface FinState {
 
 /**
  * Wired fins with amplitude/phase constraints.
- * Caudal drives thrust visualization; paired fins anti-phase for stability.
+ * v1.7: caudal amp/phase locked to body traveling wave; pectorals mostly visual / light.
  */
 export class FinController {
   readonly fins: Record<FinId, FinState>;
@@ -52,22 +53,47 @@ export class FinController {
   }
 
   /**
-   * Drive fin animation from locomotion intensity (0–1) and yaw rate.
-   * Burst → higher caudal amp/freq; hold → low amp, pectorals more active.
+   * Drive fin animation from locomotion intensity, yaw rate, and body wave.
+   * Caudal follows wave; pectorals active when holding / turning (visual/light).
    */
-  update(dt: number, intensity: number, yawRate: number, mode: string): void {
+  update(
+    dt: number,
+    intensity: number,
+    yawRate: number,
+    mode: string,
+    wave?: BodyWave,
+  ): void {
     this.time += dt;
     const burst = mode === 'burst' ? 1.4 : mode === 'hold' ? 0.35 : 1;
 
     const caudal = this.fins.caudal;
-    caudal.amplitude = THREE.MathUtils.clamp(
-      0.12 + intensity * 0.35 * burst,
-      0.05,
-      caudal.maxAmplitude,
-    );
-    caudal.omega = 8 + intensity * 10 * burst;
+    if (wave) {
+      // Phase-lock caudal to traveling-wave peduncle slope
+      const ampFromWave = THREE.MathUtils.clamp(
+        Math.abs(wave.amplitude) * 12 + 0.04,
+        0.04,
+        caudal.maxAmplitude,
+      );
+      caudal.amplitude = ampFromWave;
+      caudal.omega = wave.omega;
+      caudal.angle = THREE.MathUtils.clamp(
+        wave.caudalAngle,
+        -caudal.maxAmplitude,
+        caudal.maxAmplitude,
+      );
+      this.applyPose(caudal);
+    } else {
+      caudal.amplitude = THREE.MathUtils.clamp(
+        0.12 + intensity * 0.35 * burst,
+        0.05,
+        caudal.maxAmplitude,
+      );
+      caudal.omega = 8 + intensity * 10 * burst;
+      caudal.angle = Math.sin(this.time * caudal.omega + caudal.phase) * caudal.amplitude;
+      this.applyPose(caudal);
+    }
 
-    // Pectorals active when holding / turning
+    // Pectorals active when holding / turning (mostly visual / light)
     const pecAmp =
       mode === 'hold'
         ? 0.28
@@ -78,7 +104,8 @@ export class FinController {
     this.fins.pectoralR.omega = this.fins.pectoralL.omega;
 
     for (const fin of Object.values(this.fins)) {
-      if (fin.id !== 'caudal' && !fin.id.startsWith('pectoral')) {
+      if (fin.id === 'caudal') continue;
+      if (!fin.id.startsWith('pectoral')) {
         fin.amplitude = THREE.MathUtils.clamp(
           fin.maxAmplitude * (0.3 + intensity * 0.5),
           0.02,
@@ -119,7 +146,7 @@ export class FinController {
     }
   }
 
-  /** Instantaneous caudal lateral angle used for thrust coupling. */
+  /** Instantaneous caudal lateral angle (wave-coupled when available). */
   get caudalAngle(): number {
     return this.fins.caudal.angle;
   }

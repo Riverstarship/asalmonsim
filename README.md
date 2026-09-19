@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1.6)
+# Atlantic Salmon Migration Simulator (v1.7)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
 
@@ -55,9 +55,10 @@ hydro → env → decisions → cameras → look
 | Module | Path | Role |
 |--------|------|------|
 | Config | `src/config.ts` | Season + geolocation knobs → temp / mean current |
-| Hydro | `src/fish/Hydrodynamics.ts` | Buoyancy, drag, thrust, dorsal-up attitude plant (v1.4), collision damp |
-| Fins | `src/fish/Fins.ts` | Wired caudal, dorsal, pectorals, pelvic, anal with amplitude/phase caps |
-| Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials |
+| Hydro | `src/fish/Hydrodynamics.ts` | Buoyancy, drag, **undulatory thrust (v1.7)**, dorsal-up attitude plant (v1.4), collision damp |
+| Body wave | `src/fish/BodyWave.ts` | Carangiform traveling-wave envelope → thrust / caudal / mesh bend |
+| Fins | `src/fish/Fins.ts` | Wired fins; caudal amp/phase locked to body wave (v1.7); pectorals light/visual |
+| Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials; segmented undulatory bend |
 | Env | `src/env/*` | River corridor, **continuous** current field (jet / bank BL / depth / pool & wake gradients), temperature, lie markers |
 | Metabolism | `src/ai/Metabolism.ts` | v1.6 activity-dominated drain + light temp multiplier (Lennox-informed OOM) |
 | AI | `src/ai/*` | Sense → duty-cycled migrate/hold; mid-column cruise; anticipatory avoidance; lie residency; **v1.6 metabolism** |

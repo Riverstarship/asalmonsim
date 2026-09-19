@@ -76,5 +76,14 @@
     "minCruiseVsHoldDrainGap": 0.2,
     "minWarmVsCoolDrainGap": 0.02,
     "minActivityOverTempGap": 0.12
+  },
+  "undulatory_gait": {
+    "minCruiseWavePower": 0.25,
+    "maxHoldWavePower": 0.12,
+    "minCruiseOverHoldPowerRatio": 3.0,
+    "minCruiseWaveAmplitude": 0.015,
+    "minCruiseWaveFrequency": 0.8,
+    "minCruiseWaveThrust": 15.0,
+    "minThrustWaveCorrelation": 0.5
   }
 }

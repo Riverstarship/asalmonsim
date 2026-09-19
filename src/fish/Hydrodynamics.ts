@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FISH_LENGTH_M, FISH_MASS_KG } from '../config';
+import type { BodyWave } from './BodyWave';
 
 export interface HydroForces {
   thrust: THREE.Vector3;
@@ -34,13 +35,26 @@ const MAX_ROLL_RATE = 0.6;
 /** Soft pitch-angle cap (rad) so bed-scrape pitch cmds cannot go vertical. */
 const MAX_PITCH_ANGLE = 0.72; // ~41° — enough for bed escape / mid-column
 
+const THRUST_MAX = 55;
+/** Blend: most force from undulatory wave; small residual scalar for authority. */
+const WAVE_THRUST_BLEND = 0.82;
+/** Light yaw moment from caudal lateral excursion (does not touch roll plant). */
+const WAVE_YAW_GAIN = 1.4;
+const WAVE_LATERAL_GAIN = 7;
+
 /**
- * Buoyancy, quadratic drag, body/caudal thrust, pitch/yaw with dorsal-up attitude plant.
+ * Buoyancy, quadratic drag, undulatory thrust (v1.7), pitch/yaw with dorsal-up attitude plant.
  * v1.4: stop corkscrew — rebuild orientation from forward + world-up (roll ≈ 0).
+ * v1.7: traveling-wave body envelope generates forward thrust + light yaw.
  */
 export class Hydrodynamics {
   readonly velocity = new THREE.Vector3();
   readonly angularVelocity = new THREE.Vector3(); // pitch, yaw, roll rates in body frame-ish
+
+  /** Last forward thrust magnitude (N) — harness gait/thrust correlation. */
+  lastThrustMag = 0;
+  /** Last wave-power used for thrust mapping. */
+  lastWavePower = 0;
 
   private readonly _forward = new THREE.Vector3();
   private readonly _up = new THREE.Vector3();
@@ -87,7 +101,7 @@ export class Hydrodynamics {
     orientation: THREE.Quaternion,
     waterVel: THREE.Vector3,
     cmd: SwimCommand,
-    caudalAngle: number,
+    wave: BodyWave,
   ): HydroForces {
     this._forward.set(0, 0, 1).applyQuaternion(orientation);
     this._up.set(0, 1, 0).applyQuaternion(orientation);
@@ -105,16 +119,36 @@ export class Hydrodynamics {
     const buoyForce = (WATER_DENSITY * BODY_VOLUME - FISH_MASS_KG) * 9.81;
     const buoyancy = new THREE.Vector3(0, buoyForce + cmd.thrustLevel * 2.5, 0);
 
-    const thrustMax = 55;
-    const thrustMag = cmd.thrustLevel * thrustMax;
+    // --- v1.7 undulatory thrust: force from wave power, blended with residual scalar ---
+    this.lastWavePower = wave.wavePower;
+    const waveDrive = THREE.MathUtils.clamp(wave.wavePower, 0, 1.1);
+    const scalarDrive = THREE.MathUtils.clamp(cmd.thrustLevel, 0, 1);
+    // Mostly wave-driven when undulating; command floor preserves hold station-keeping
+    // when the envelope is nearly quiet (modeAmp ≪ 1).
+    const blended =
+      WAVE_THRUST_BLEND * waveDrive + (1 - WAVE_THRUST_BLEND) * scalarDrive;
+    const thrustNorm = THREE.MathUtils.clamp(
+      Math.max(scalarDrive * 0.72, blended),
+      0,
+      1.15,
+    );
+    const thrustMag = thrustNorm * THRUST_MAX;
+    this.lastThrustMag = thrustMag;
+
     const thrust = this._forward.clone().multiplyScalar(thrustMag);
-    thrust.addScaledVector(this._right, Math.sin(caudalAngle) * thrustMag * 0.15);
+    // Instantaneous lateral from caudal traveling wave (small; mean ≈ 0)
+    thrust.addScaledVector(
+      this._right,
+      wave.caudalLateral * WAVE_LATERAL_GAIN * (0.35 + 0.65 * wave.intensity),
+    );
 
     // Pitch/yaw command + damping. No yaw→roll bank coupling (corkscrew fuel).
     // Roll cmd is tiny; plant zeros residual roll after integrate.
+    // Light yaw moment from wave (phase-locked to caudal), does not affect roll rebuild.
+    const waveYaw = wave.caudalLateral * WAVE_YAW_GAIN * wave.intensity;
     const torque = new THREE.Vector3(
       cmd.pitch * 7 - this.angularVelocity.x * 5.5,
-      cmd.yaw * 9 - this.angularVelocity.y * 6,
+      cmd.yaw * 9 + waveYaw - this.angularVelocity.y * 6,
       cmd.roll * 1.2 - this.angularVelocity.z * 16,
     );
     torque.y *= 0.5 + Math.min(1, speed);

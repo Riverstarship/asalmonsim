@@ -25,11 +25,11 @@ Sources used for planning (not claimed as “implemented”):
 
 **What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-## Gap vs current build (v1.6)
+## Gap vs current build (v1.7)
 
-| Ethology target | Current sim (v1.6) | Gap |
+| Ethology target | Current sim (v1.7) | Gap |
 |-----------------|---------------------|-----|
-| Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; harness `attitude_hydro` (roll ≈ 0°) | Pitch still angle-capped (~41°); no true fin-generated moments |
+| Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; harness `attitude_hydro` (roll ≈ 0°); preserved under v1.7 wave yaw | Pitch still angle-capped (~41°); wave yaw is light only |
 | Stepwise move/hold duty cycle | Explicit migrate/hold phases + hysteresis; harness `duty_cycle_ethology` | Hold fraction still short of telemetry “mostly holding” residency |
 | Near-zero ground speed in lies | Low thrust match + slip/surge correction; `timeHoldLowSpeed` gated | Occasional slip on soft wake edges |
 | Mid-column when moving | Mid-column pitch on cruise/burst; fraction gated in harness | Mid-column fraction ~0.3–0.5 of migrate time — room to climb |
@@ -38,6 +38,7 @@ Sources used for planning (not claimed as “implemented”):
 | Anticipatory avoidance | Bank/bed/surface clearance + light turbulence-proxy bias when seeking | Bed scrape counts still O(10²)–O(10³) under hard clamps |
 | Fish-eye observation | **v1.2b:** direct wide-FOV to screen; POV clamped in free water | Barrel distortion deferred (flag default off) |
 | Activity ≫ mild temp energy cost | **v1.6:** `Metabolism.ts` — hold ≪ cruise ≪ burst drain; through-water effort; light Q10≈1.6 temp mul; harness `fatigue_*` + `fatigue_compare` | Not validated kcal / full bioenergetics; no thermoregulatory refuge seeking yet |
+| Undulatory thrust from body wave | **v1.7:** carangiform `BodyWave` → hydro thrust + light yaw; caudal/mesh coupled; harness `undulatory_gait_*` + `undulatory_compare` | Not full FSI/CFD or FEM muscle; envelope model only |
 
 ## Version plan (toward the goal)
 
@@ -48,14 +49,18 @@ Sources used for planning (not claimed as “implemented”):
 | **v1.4** ✓ | **Attitude hydro** — dorsal-up rebuild, roll damp/rate caps, kill yaw→roll corkscrew; roll cmd automatic | Ethology can express without spinning plant | `attitude_hydro`: \|roll\| ≈ 0°; low \|ω_roll\|; existing scenarios still pass |
 | **v1.5** ✓ | Richer hydraulic field (same `sample()` API): mid-channel jet, bank BL, depth decay, pools & boulder wakes as **continuous** gradients; turbulence-intensity proxy | Makes lie choice physically motivated | `continuous_field_probe`; hold/lie \|flow\| < mid-channel ref; low `timeHoldFastCore` |
 | **v1.6** ✓ | Fatigue / temp metabolic multipliers (OOM from Lennox-style curves) | Activity cost ≫ mild temp cost | Continuous cruise drains faster than hold; warm > cool drain modestly; activity gap > ΔT gap |
-| **v1.7** | Undulatory / biomechanics thrust | Body motion generates force | Gait metrics; still decision-outer-loop |
-| **Later** | Olfactory/homing lite, thermoregulatory refuge shifts, ocean/estuary packs, visuals | Expand habitat without rewriting fish | Portable fish + env packs |
+| **v1.7** ✓ | Undulatory / biomechanics thrust | Body wave generates force (outer-loop intent unchanged) | Gait metrics; thrust∝wave; attitude/fatigue/hydraulics/duty still green |
+| **Later** | Hold-residency retune, thermorefuge, olfactory/homing lite, ocean/estuary packs, visuals | Expand habitat / ethology without rewriting fish | Portable fish + env packs |
 
-**Explicitly deferred until listed version:** real ADCP/CFD import, undulatory biomechanics (v1.7), barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting.
+**Explicitly deferred:** real ADCP/CFD / FSI, FEM muscle, barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting, olfactory/homing, thermoregulatory refuge, maps packs.
 
 ## Strategy (one line)
 
-Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → **calibrate energy / fatigue-temp (v1.6)** → then undulatory biomechanics (v1.7) / visuals.
+Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → calibrate energy / fatigue-temp (v1.6) → **undulatory biomechanics (v1.7)** → next: hold-residency ethology retune / thermorefuge / homing / maps / visuals.
+
+## Next (after v1.7)
+
+Hold-residency ethology retune (telemetry-scale holding fraction) → thermoregulatory refuge seeking → olfactory/homing lite → ocean/estuary / map packs → visuals (textures, barrel polish). Decisions stay outer-loop; no FEM muscle / full FSI.
 
 ## Headless harness
 
@@ -63,7 +68,7 @@ Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude pl
 npm run test:accuracy
 ```
 
-Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.6 adds forced-mode `fatigue_cruise_drain` / `fatigue_hold_recover` / warm–cool cruise pairs and `fatigue_compare` (activity gap ≫ modest ΔT) on top of v1.5 hydraulics + v1.4 attitude + v1.3 duty-cycle gates.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.7 adds `undulatory_gait_cruise` / `undulatory_gait_hold` + `undulatory_compare` (wave amp/freq/power; thrust∝wave; cruise≫hold power) on top of v1.6 fatigue + v1.5 hydraulics + v1.4 attitude + v1.3 duty-cycle gates.
 
 ## Live demo
 

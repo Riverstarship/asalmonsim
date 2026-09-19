@@ -100,6 +100,20 @@ export interface CoreMetrics {
   meanTempC: number;
   /** Gross energy drop max−min over the run (fatigue probe). */
   energyDrop: number;
+  /** Mean traveling-wave amplitude (m) — undulatory gait. */
+  meanWaveAmplitude: number;
+  /** Mean wave frequency (Hz). */
+  meanWaveFrequency: number;
+  /** Mean wave-power proxy (dimensionless). */
+  meanWavePower: number;
+  /** Mean forward thrust magnitude from hydro (N). */
+  meanWaveThrust: number;
+  /** Peak wave power observed. */
+  maxWavePower: number;
+  /** Σ thrustLevel·wavePower / n — for intensity↔power correlation. */
+  thrustWaveCov: number;
+  /** Mean thrustLevel (same as meanThrust) alias for gait report. */
+  meanThrustLevel: number;
 }
 
 /**
@@ -157,6 +171,12 @@ export class CoreSim {
   private lieFlowSamples = 0;
   private timeHoldFastCore = 0;
   private tempSum = 0;
+  private waveAmpSum = 0;
+  private waveFreqSum = 0;
+  private wavePowerSum = 0;
+  private waveThrustSum = 0;
+  private maxWavePower = 0;
+  private thrustWaveProdSum = 0;
   private initialEnergy = 1;
   private lastDecision: DecisionOutput | null = null;
   private readonly _rollRight = new THREE.Vector3();
@@ -278,6 +298,13 @@ export class CoreSim {
       lieFlowSamples: this.lieFlowSamples,
       meanTempC: this.steps > 0 ? this.tempSum / this.steps : 0,
       energyDrop: this.maxEnergy - this.minEnergy,
+      meanWaveAmplitude: this.steps > 0 ? this.waveAmpSum / this.steps : 0,
+      meanWaveFrequency: this.steps > 0 ? this.waveFreqSum / this.steps : 0,
+      meanWavePower: this.steps > 0 ? this.wavePowerSum / this.steps : 0,
+      meanWaveThrust: this.steps > 0 ? this.waveThrustSum / this.steps : 0,
+      maxWavePower: this.maxWavePower,
+      thrustWaveCov: this.steps > 0 ? this.thrustWaveProdSum / this.steps : 0,
+      meanThrustLevel: this.steps > 0 ? this.thrustSum / this.steps : 0,
     };
   }
 
@@ -397,6 +424,15 @@ export class CoreSim {
     this.maxAbsRollRate = Math.max(this.maxAbsRollRate, absWr);
     this.rollRateSum += wr;
     this.rollRateSqSum += wr * wr;
+
+    // v1.7 undulatory gait metrics
+    const w = this.fish.wave;
+    this.waveAmpSum += w.amplitude;
+    this.waveFreqSum += w.frequencyHz;
+    this.wavePowerSum += w.wavePower;
+    this.waveThrustSum += this.fish.hydro.lastThrustMag;
+    this.maxWavePower = Math.max(this.maxWavePower, w.wavePower);
+    this.thrustWaveProdSum += decision.thrustLevel * w.wavePower;
   }
 
   private signedRollRad(): number {

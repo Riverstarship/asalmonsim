@@ -153,6 +153,32 @@ export const SCENARIOS: ScenarioDef[] = [
     forceMode: 'cruise',
     config: { tempOverrideC: 6 },
   },
+  {
+    id: 'undulatory_gait_cruise',
+    description:
+      'Forced cruise: traveling-wave amp/freq/power elevated; thrust tracks wave intensity',
+    seed: 1020,
+    dt: 1 / 30,
+    duration: 12,
+    start: [0.15, 1.9, 14],
+    initialEnergy: 1.0,
+    dischargeScale: 1.0,
+    forceMode: 'cruise',
+    config: { tempOverrideC: 10 },
+  },
+  {
+    id: 'undulatory_gait_hold',
+    description:
+      'Forced hold: wave nearly quiet; wave power ≪ cruise (gait intensity gate)',
+    seed: 1021,
+    dt: 1 / 30,
+    duration: 12,
+    start: [0.2, 1.6, 12.0],
+    initialEnergy: 0.7,
+    dischargeScale: 1.0,
+    forceMode: 'hold',
+    config: { tempOverrideC: 10 },
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {
