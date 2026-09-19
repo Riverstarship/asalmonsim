@@ -24,6 +24,8 @@ export interface CoreMetrics {
   endZ: number;
   /** Net upstream distance-made-good (Δz). */
   dmg: number;
+  /** Upstream DMG accumulated only during migratory modes (cruise/burst). */
+  migrateDmg: number;
   minEnergy: number;
   maxEnergy: number;
   endEnergy: number;
@@ -32,6 +34,14 @@ export interface CoreMetrics {
   timeInSeekHold: number;
   timeInBurst: number;
   timeInCruise: number;
+  /** Seconds in hold with near-zero ground speed (energy-saving station-hold). */
+  timeHoldLowSpeed: number;
+  /** Seconds mid-column during migratory cruise/burst bouts. */
+  timeMidColumnMigrate: number;
+  /** Fraction of total time in hold mode. */
+  holdFraction: number;
+  /** Mid-column fraction of migratory (cruise+burst) time. */
+  midColumnMigrateFraction: number;
   maxThrust: number;
   meanThrust: number;
   meanFlowSpeed: number;
@@ -42,6 +52,7 @@ export interface CoreMetrics {
   outOfBoundsCount: number;
   lastMode: string;
   lastRationale: string;
+  lastPhase: string;
   occupiedLie: boolean;
   reachedLie: boolean;
   /** Mean downstream ground speed while in hold (slip proxy). */
@@ -78,6 +89,11 @@ export class CoreSim {
   private timeInSeekHold = 0;
   private timeInBurst = 0;
   private timeInCruise = 0;
+  private timeHoldLowSpeed = 0;
+  private timeMidColumnMigrate = 0;
+  private timeMigrate = 0;
+  private migrateDmg = 0;
+  private prevZ: number;
   private maxThrust = 0;
   private minEnergy = 1;
   private maxEnergy = 0;
@@ -110,6 +126,7 @@ export class CoreSim {
       this.fish.energy = opts.initialEnergy;
     }
     this.startZ = start.z;
+    this.prevZ = start.z;
     this.minEnergy = this.decisions.getEnergy();
     this.maxEnergy = this.decisions.getEnergy();
   }
@@ -137,12 +154,14 @@ export class CoreSim {
   metrics(): CoreMetrics {
     const p = this.fish.position;
     const energy = this.decisions.getEnergy();
+    const migrateT = this.timeMigrate;
     return {
       time: this.time,
       steps: this.steps,
       startZ: this.startZ,
       endZ: p.z,
       dmg: p.z - this.startZ,
+      migrateDmg: this.migrateDmg,
       minEnergy: this.minEnergy,
       maxEnergy: this.maxEnergy,
       endEnergy: energy,
@@ -151,6 +170,11 @@ export class CoreSim {
       timeInSeekHold: this.timeInSeekHold,
       timeInBurst: this.timeInBurst,
       timeInCruise: this.timeInCruise,
+      timeHoldLowSpeed: this.timeHoldLowSpeed,
+      timeMidColumnMigrate: this.timeMidColumnMigrate,
+      holdFraction: this.time > 0 ? this.timeInHold / this.time : 0,
+      midColumnMigrateFraction:
+        migrateT > 0 ? this.timeMidColumnMigrate / migrateT : 0,
       maxThrust: this.maxThrust,
       meanThrust: this.steps > 0 ? this.thrustSum / this.steps : 0,
       meanFlowSpeed: this.steps > 0 ? this.flowSum / this.steps : 0,
@@ -161,6 +185,7 @@ export class CoreSim {
       outOfBoundsCount: this.outOfBoundsCount,
       lastMode: this.lastDecision?.mode ?? 'cruise',
       lastRationale: this.lastDecision?.rationale ?? '',
+      lastPhase: this.lastDecision?.phase ?? 'migrate',
       occupiedLie: this.occupiedLie,
       reachedLie: this.reachedLie,
       holdDownstreamSlip:
@@ -203,7 +228,6 @@ export class CoreSim {
       this.nanCount += 1;
     }
 
-    // Post-containment: soft corridor check (should stay near zero with hard walls)
     const r = this.fish.bodyRadius;
     if (
       this.river.bankClearanceAt(p, r) < -0.02 ||
@@ -215,35 +239,45 @@ export class CoreSim {
       this.outOfBoundsCount += 1;
     }
 
-    // Penetration events are counted from the collision resolve that just ran
     if (this.fish.lastBankHit) this.bankPenetrationEvents += 1;
     if (this.fish.lastBedHit) this.bedPenetrationEvents += 1;
     if (this.fish.lastSurfaceHit) this.surfaceBreachEvents += 1;
 
-    // Post-containment: residual time above free surface (≈0 with hard clamp)
     if (this.river.surfaceClearanceAt(p, r) < -1e-4) {
       this.timeAboveSurface += dt;
     }
+
+    const dz = p.z - this.prevZ;
+    this.prevZ = p.z;
+
+    const midColumn = snap.bedClearance >= 0.55 && snap.surfaceClearance >= 0.65;
 
     switch (decision.mode) {
       case 'hold':
         this.timeInHold += dt;
         this.holdSlipSum += Math.max(0, -this.fish.hydro.velocity.z);
         this.holdSlipSamples += 1;
+        if (this.fish.groundSpeed < 0.28) this.timeHoldLowSpeed += dt;
         break;
       case 'seek_hold':
         this.timeInSeekHold += dt;
         break;
       case 'burst':
         this.timeInBurst += dt;
+        this.timeMigrate += dt;
+        this.migrateDmg += dz;
+        if (midColumn) this.timeMidColumnMigrate += dt;
         break;
       case 'cruise':
         this.timeInCruise += dt;
+        this.timeMigrate += dt;
+        this.migrateDmg += dz;
+        if (midColumn) this.timeMidColumnMigrate += dt;
         break;
     }
 
     const lie = this.river.nearestHoldingLie(p);
-    const inLie = p.distanceTo(lie.position) <= lie.radius * 1.15;
+    const inLie = this.river.occupiesLie(p, lie);
     if (inLie) {
       this.timeInLie += dt;
       this.occupiedLie = true;

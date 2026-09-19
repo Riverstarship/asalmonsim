@@ -18,6 +18,8 @@ interface Thresholds {
   hold_midchannel: {
     maxHoldDownstreamSlip: number;
     minTimeInHold: number;
+    minHoldFraction: number;
+    minHoldLowSpeed: number;
   };
   seek_lie_when_tired: {
     mustReachOrOccupyLie: boolean;
@@ -25,6 +27,7 @@ interface Thresholds {
   };
   upstream_dmg: {
     minDmg: number;
+    minTimeInCruise: number;
   };
   energy_burst_limits: {
     maxEndEnergyIfBurstHeavy: number;
@@ -37,9 +40,22 @@ interface Thresholds {
     maxAbsX: number;
     minY: number;
     maxY: number;
+    maxBankPenetrationEvents: number;
+    maxBedPenetrationEvents: number;
+    maxSurfaceBreachEvents: number;
   };
   containment: {
     maxTimeAboveSurface: number;
+    maxBankPenetrationEvents: number;
+    maxBedPenetrationEvents: number;
+    maxSurfaceBreachEvents: number;
+    maxOutOfBoundsCount: number;
+  };
+  duty_cycle_ethology: {
+    minHoldFraction: number;
+    minHoldLowSpeed: number;
+    minMidColumnMigrateFraction: number;
+    minTimeInCruise: number;
     maxBankPenetrationEvents: number;
     maxBedPenetrationEvents: number;
     maxSurfaceBreachEvents: number;
@@ -64,6 +80,14 @@ function checkHold(m: CoreMetrics, t: Thresholds['hold_midchannel']): Check[] {
       ok: m.timeInHold >= t.minTimeInHold,
       msg: `timeInHold ${m.timeInHold.toFixed(2)} >= ${t.minTimeInHold}`,
     },
+    {
+      ok: m.holdFraction >= t.minHoldFraction,
+      msg: `holdFraction ${m.holdFraction.toFixed(2)} >= ${t.minHoldFraction}`,
+    },
+    {
+      ok: m.timeHoldLowSpeed >= t.minHoldLowSpeed,
+      msg: `timeHoldLowSpeed ${m.timeHoldLowSpeed.toFixed(2)} >= ${t.minHoldLowSpeed}`,
+    },
   ];
 }
 
@@ -86,6 +110,10 @@ function checkDmg(m: CoreMetrics, t: Thresholds['upstream_dmg']): Check[] {
     {
       ok: m.dmg >= t.minDmg,
       msg: `dmg ${m.dmg.toFixed(2)} >= ${t.minDmg}`,
+    },
+    {
+      ok: m.timeInCruise >= t.minTimeInCruise,
+      msg: `timeInCruise ${m.timeInCruise.toFixed(2)} >= ${t.minTimeInCruise}`,
     },
   ];
 }
@@ -126,6 +154,18 @@ function checkStability(m: CoreMetrics, t: Thresholds['stability']): Check[] {
       ok: m.minY >= t.minY && m.maxY <= t.maxY,
       msg: `y in [${t.minY},${t.maxY}] (got ${m.minY.toFixed(2)}..${m.maxY.toFixed(2)})`,
     },
+    {
+      ok: m.bankPenetrationEvents <= t.maxBankPenetrationEvents,
+      msg: `bankPenetrationEvents ${m.bankPenetrationEvents} <= ${t.maxBankPenetrationEvents}`,
+    },
+    {
+      ok: m.bedPenetrationEvents <= t.maxBedPenetrationEvents,
+      msg: `bedPenetrationEvents ${m.bedPenetrationEvents} <= ${t.maxBedPenetrationEvents}`,
+    },
+    {
+      ok: m.surfaceBreachEvents <= t.maxSurfaceBreachEvents,
+      msg: `surfaceBreachEvents ${m.surfaceBreachEvents} <= ${t.maxSurfaceBreachEvents}`,
+    },
   ];
 }
 
@@ -134,6 +174,43 @@ function checkContainment(m: CoreMetrics, t: Thresholds['containment']): Check[]
     {
       ok: m.timeAboveSurface <= t.maxTimeAboveSurface,
       msg: `timeAboveSurface ${m.timeAboveSurface.toFixed(3)}s <= ${t.maxTimeAboveSurface}`,
+    },
+    {
+      ok: m.bankPenetrationEvents <= t.maxBankPenetrationEvents,
+      msg: `bankPenetrationEvents ${m.bankPenetrationEvents} <= ${t.maxBankPenetrationEvents}`,
+    },
+    {
+      ok: m.bedPenetrationEvents <= t.maxBedPenetrationEvents,
+      msg: `bedPenetrationEvents ${m.bedPenetrationEvents} <= ${t.maxBedPenetrationEvents}`,
+    },
+    {
+      ok: m.surfaceBreachEvents <= t.maxSurfaceBreachEvents,
+      msg: `surfaceBreachEvents ${m.surfaceBreachEvents} <= ${t.maxSurfaceBreachEvents}`,
+    },
+    {
+      ok: m.outOfBoundsCount <= t.maxOutOfBoundsCount,
+      msg: `outOfBoundsCount ${m.outOfBoundsCount} <= ${t.maxOutOfBoundsCount}`,
+    },
+  ];
+}
+
+function checkDuty(m: CoreMetrics, t: Thresholds['duty_cycle_ethology']): Check[] {
+  return [
+    {
+      ok: m.holdFraction >= t.minHoldFraction,
+      msg: `holdFraction ${m.holdFraction.toFixed(2)} >= ${t.minHoldFraction}`,
+    },
+    {
+      ok: m.timeHoldLowSpeed >= t.minHoldLowSpeed,
+      msg: `timeHoldLowSpeed ${m.timeHoldLowSpeed.toFixed(2)} >= ${t.minHoldLowSpeed}`,
+    },
+    {
+      ok: m.midColumnMigrateFraction >= t.minMidColumnMigrateFraction,
+      msg: `midColumnMigrateFraction ${m.midColumnMigrateFraction.toFixed(2)} >= ${t.minMidColumnMigrateFraction}`,
+    },
+    {
+      ok: m.timeInCruise >= t.minTimeInCruise,
+      msg: `timeInCruise ${m.timeInCruise.toFixed(2)} >= ${t.minTimeInCruise}`,
     },
     {
       ok: m.bankPenetrationEvents <= t.maxBankPenetrationEvents,
@@ -164,9 +241,8 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness\n');
+  console.log('asalmonsim accuracy harness (v1.3 ethology)\n');
 
-  // Sanity: hard lies create measurable velocity deficits vs mid-channel
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
     const lie = probe.river.holdingLies[1]!;
@@ -208,6 +284,9 @@ function main(): void {
       case 'containment':
         checks = checkContainment(m, thresholds.containment);
         break;
+      case 'duty_cycle_ethology':
+        checks = checkDuty(m, thresholds.duty_cycle_ethology);
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -220,7 +299,9 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     console.log(
-      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
+      `       dmg=${m.dmg.toFixed(2)} energy=${m.endEnergy.toFixed(2)} hold=${m.timeInHold.toFixed(1)}s` +
+        ` holdFrac=${m.holdFraction.toFixed(2)} midMigFrac=${m.midColumnMigrateFraction.toFixed(2)}` +
+        ` lie=${m.timeInLie.toFixed(1)}s burst=${m.timeInBurst.toFixed(1)}s` +
         ` surfT=${m.timeAboveSurface.toFixed(2)}s pen(bank/bed/surf)=${m.bankPenetrationEvents}/${m.bedPenetrationEvents}/${m.surfaceBreachEvents}`,
     );
 

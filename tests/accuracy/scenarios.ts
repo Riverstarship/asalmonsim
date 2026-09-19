@@ -18,12 +18,13 @@ export interface ScenarioDef {
 export const SCENARIOS: ScenarioDef[] = [
   {
     id: 'hold_midchannel',
-    description: 'Start mid-channel moderate flow; hold mode limits downstream slip',
+    description:
+      'Near structure lie; duty-cycle hold limits downstream slip / low ground speed',
     seed: 101,
     dt: 1 / 30,
-    duration: 12,
-    start: [0.15, 1.0, 11.8],
-    initialEnergy: 0.48,
+    duration: 24,
+    start: [0.2, 1.6, 12.0],
+    initialEnergy: 0.4,
     dischargeScale: 1.05,
   },
   {
@@ -32,19 +33,19 @@ export const SCENARIOS: ScenarioDef[] = [
     seed: 202,
     dt: 1 / 30,
     duration: 45,
-    start: [-1.5, 0.8, 16],
+    start: [-1.5, 1.2, 16],
     initialEnergy: 0.26,
     dischargeScale: 1.3,
   },
   {
     id: 'upstream_dmg',
-    description: 'Cruise/rheotaxis net upstream distance-made-good over window',
+    description: 'Migratory bouts accumulate upstream DMG (hold bouts allowed)',
     seed: 303,
     dt: 1 / 30,
-    duration: 45,
-    start: [0, 1.2, 8],
-    initialEnergy: 0.9,
-    dischargeScale: 0.85,
+    duration: 70,
+    start: [0, 1.8, 8],
+    initialEnergy: 1.0,
+    dischargeScale: 0.75,
   },
   {
     id: 'energy_burst_limits',
@@ -52,7 +53,7 @@ export const SCENARIOS: ScenarioDef[] = [
     seed: 404,
     dt: 1 / 30,
     duration: 22,
-    start: [0, 1.4, 42],
+    start: [0, 1.6, 42],
     initialEnergy: 1.0,
     dischargeScale: 1.55,
   },
@@ -62,8 +63,8 @@ export const SCENARIOS: ScenarioDef[] = [
     seed: 505,
     dt: 1 / 30,
     duration: 60,
-    start: [0, 1.2, 8],
-    initialEnergy: 0.8,
+    start: [0, 1.7, 8],
+    initialEnergy: 0.85,
     dischargeScale: 1.0,
   },
   {
@@ -74,9 +75,20 @@ export const SCENARIOS: ScenarioDef[] = [
     dt: 1 / 30,
     duration: 40,
     // Start near surface and a bank to stress containment
-    start: [4.8, 3.4, 25],
+    start: [4.2, 2.4, 25],
     initialEnergy: 0.85,
-    dischargeScale: 1.2,
+    dischargeScale: 1.15,
+  },
+  {
+    id: 'duty_cycle_ethology',
+    description:
+      'Stepwise ascent: substantial hold / low-speed hold; mid-column while migrating; low scrapes',
+    seed: 730,
+    dt: 1 / 30,
+    duration: 90,
+    start: [0.3, 1.7, 11],
+    initialEnergy: 0.85,
+    dischargeScale: 0.95,
   },
 ];
 

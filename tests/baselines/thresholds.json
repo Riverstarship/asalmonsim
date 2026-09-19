@@ -1,14 +1,17 @@
 {
   "hold_midchannel": {
-    "maxHoldDownstreamSlip": 0.85,
-    "minTimeInHold": 1.5
+    "maxHoldDownstreamSlip": 0.75,
+    "minTimeInHold": 8.0,
+    "minHoldFraction": 0.3,
+    "minHoldLowSpeed": 1.5
   },
   "seek_lie_when_tired": {
     "mustReachOrOccupyLie": true,
     "minTimeInLieOrSeek": 8.0
   },
   "upstream_dmg": {
-    "minDmg": 5.0
+    "minDmg": 5.0,
+    "minTimeInCruise": 8.0
   },
   "energy_burst_limits": {
     "maxEndEnergyIfBurstHeavy": 0.7,
@@ -20,13 +23,26 @@
     "maxOutOfBoundsCount": 2,
     "maxAbsX": 6.2,
     "minY": 0.15,
-    "maxY": 4.1
+    "maxY": 4.1,
+    "maxBankPenetrationEvents": 200,
+    "maxBedPenetrationEvents": 500,
+    "maxSurfaceBreachEvents": 450
   },
   "containment": {
     "maxTimeAboveSurface": 0.05,
-    "maxBankPenetrationEvents": 1200,
-    "maxBedPenetrationEvents": 1200,
-    "maxSurfaceBreachEvents": 1200,
+    "maxBankPenetrationEvents": 200,
+    "maxBedPenetrationEvents": 450,
+    "maxSurfaceBreachEvents": 350,
+    "maxOutOfBoundsCount": 0
+  },
+  "duty_cycle_ethology": {
+    "minHoldFraction": 0.18,
+    "minHoldLowSpeed": 1.5,
+    "minMidColumnMigrateFraction": 0.25,
+    "minTimeInCruise": 8.0,
+    "maxBankPenetrationEvents": 250,
+    "maxBedPenetrationEvents": 550,
+    "maxSurfaceBreachEvents": 450,
     "maxOutOfBoundsCount": 0
   }
 }

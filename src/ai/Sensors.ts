@@ -20,8 +20,14 @@ export interface SenseSnapshot {
   holdingLieDist: number;
   /** Radius of nearest holding lie. */
   lieRadius: number;
+  /** True if inside nearest lie ellipsoid (structure pocket). */
+  inLie: boolean;
   energy: number;
   groundSpeed: number;
+  /** Lateral position (m); sign used for bank avoidance toward centre. */
+  lateralX: number;
+  /** Ground velocity along +Z (upstream). Negative = downstream slip. */
+  streamwiseGround: number;
 }
 
 /**
@@ -63,7 +69,10 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
     toHoldingLie,
     holdingLieDist,
     lieRadius: lie.radius,
+    inLie: river.occupiesLie(p, lie),
     energy: fish.energy,
     groundSpeed: fish.groundSpeed,
+    lateralX: p.x,
+    streamwiseGround: fish.hydro.velocity.z,
   };
 }

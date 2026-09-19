@@ -25,23 +25,24 @@ Sources used for planning (not claimed as “implemented”):
 
 **What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-## Gap vs current build (v1.2a)
+## Gap vs current build (v1.3)
 
-| Ethology target | Current sim | Gap |
-|-----------------|-------------|-----|
-| Stepwise move/hold duty cycle | Modes exist but often look like restless cruise | Need explicit migratory vs hold phases + hysteresis |
-| Near-zero ground speed in lies | Hold reduces slip but not “pool motionless” | Stronger hold thrust-matching + long hold residency |
-| Mid-column when moving | Hard clamps only; weak clearance bias | Anticipatory depth/bank preference |
-| Low-V structure selection | Hard lie pockets + seek_hold | OK scaffold; needs hydraulic gradients (v1.4) |
-| Burst then recover | Burst mode + energy drain | Tie burst to obstacle/high-V only; longer recover-in-lie |
-| Fish-eye observation | **Black screen** (RT post-process) | Sidecar fix — not an ethology item |
+| Ethology target | Current sim (v1.3) | Gap |
+|-----------------|---------------------|-----|
+| Stepwise move/hold duty cycle | Explicit migrate/hold phases + hysteresis; harness `duty_cycle_ethology` | Hold fraction still short of telemetry “mostly holding” residency |
+| Near-zero ground speed in lies | Low thrust match + slip/surge correction; `timeHoldLowSpeed` gated | Occasional slip when exiting ellipsoid pockets |
+| Mid-column when moving | Mid-column pitch on cruise/burst; fraction gated in harness | Mid-column fraction ~0.3–0.5 of migrate time — room to climb |
+| Low-V structure selection | Hard lie pockets + ellipsoid occupy + seek-when-holding | Needs continuous hydraulic gradients (v1.4) |
+| Burst then recover | Burst only for high flow/obstacle; then hold/seek lie | Obstacle sensing still coarse |
+| Anticipatory avoidance | Bank/bed/surface clearance steering + bank escape | Bed scrape counts still O(10²)–O(10³) under hard clamps |
+| Fish-eye observation | **v1.2b:** direct wide-FOV to screen; POV clamped in free water | Barrel distortion deferred (flag default off) |
 
 ## Version plan (toward the goal)
 
 | Version | Focus | Ethology payoff | Exit criteria (headless + your visual check) |
 |---------|--------|-----------------|-----------------------------------------------|
-| **v1.2b** | Fish-eye unblack (direct wide-FOV; clamp POV in free water). **Sidecar, not accuracy core.** | Lets you observe behavior | Fish-eye shows corridor; harness unchanged |
-| **v1.3** | **Duty-cycle migration + mid-water behavior** | Matches stepwise ascent + mid-column + anticipatory avoidance | ↑ time-in-hold; ↑ time mid-column; ↓ scrape rate; hold slip≈0 in lies; DMG only during migratory bouts |
+| **v1.2b** ✓ | Fish-eye unblack (direct wide-FOV; clamp POV in free water). **Sidecar.** | Lets you observe behavior | Fish-eye shows corridor; barrel RT off |
+| **v1.3** ✓ | **Duty-cycle migration + mid-water behavior** | Stepwise ascent + mid-column + anticipatory avoidance | ↑ time-in-hold; ↑ mid-column migrate frac; ↓ scrape caps vs v1.2a; hold slip low in lies; DMG during migrate windows |
 | **v1.4** | Richer hydraulic field (same `sample()` API): shear, pools, boulder wakes as continuous gradients | Makes lie choice physically motivated | Lie occupancy correlates with local V deficit; avoid high-V core when holding |
 | **v1.5** | Fatigue / temp metabolic multipliers (OOM from Lennox-style curves) | Activity cost ≫ mild temp cost | Continuous cruise drains faster than hold; temp scales drain modestly |
 | **v1.6** | Undulatory / biomechanics thrust | Body motion generates force | Gait metrics; still decision-outer-loop |
@@ -59,7 +60,7 @@ Unblack the camera → make the fish **hold and move like telemetry says** (v1.3
 npm run test:accuracy
 ```
 
-Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.3 adds `duty_cycle_ethology` plus hold-fraction / mid-column / tighter scrape gates.
 
 ## Live demo
 

@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1.2a)
+# Atlantic Salmon Migration Simulator (v1.3)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
 
@@ -43,7 +43,7 @@ Fixed-seed scenarios live in `tests/accuracy/`; baselines in `tests/baselines/th
 | UI | Action |
 |----|--------|
 | **Follow cam** | Chase camera behind the fish (default) |
-| **Fish-eye** | Head-mounted wide FOV + barrel distortion (fish mesh hidden via layers) |
+| **Fish-eye** | Head-mounted wide FOV direct-to-screen (fish mesh hidden; barrel RT optional/off) |
 | **Hide/Show info** | Toggle the HUD card for more screen space |
 
 ## Architecture (build order)
@@ -59,8 +59,8 @@ hydro → env → decisions → cameras → look
 | Fins | `src/fish/Fins.ts` | Wired caudal, dorsal, pectorals, pelvic, anal with amplitude/phase caps |
 | Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials |
 | Env | `src/env/*` | River corridor, current field (core/shear/**hard lie deficits**), temperature, holding lies |
-| AI | `src/ai/*` | Sense → hold / cruise / burst / seek_hold; lie preference + rheotaxis + fatigue |
-| Cameras | `src/cameras/*` | Follow/chase + fish-eye distortion |
+| AI | `src/ai/*` | Sense → duty-cycled migrate/hold; mid-column cruise; anticipatory avoidance; lie residency |
+| Cameras | `src/cameras/*` | Follow/chase + fish-eye wide-FOV (direct render) |
 | UI | `src/ui/*` | Camera buttons + toggleable HUD (no accuracy overlay) |
 | Core | `src/sim/CoreSim.ts` | Headless step loop (sense→decide→integrate) |
 | Sim | `src/sim/Simulation.ts` | Browser renderer + HUD wired to CoreSim |
