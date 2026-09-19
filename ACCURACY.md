@@ -1,45 +1,57 @@
-# Accuracy — Atlantic salmon adult (v1.2a)
+# Accuracy — Atlantic salmon adult
 
-Honest fidelity tracking for *Salmo salar* upriver ascent. Prefer stating gaps over implying validation. Accuracy is communicated via this doc, the headless harness, and chat — **not** an in-app overlay.
+Honest fidelity tracking for *Salmo salar* **adult upriver / pre-spawn migration**. Prefer stating gaps over implying validation. Accuracy lives in this doc, the headless harness, and chat — **not** an in-app overlay.
 
 ## Goal
 
-Represent an **adult Atlantic salmon** migrating up a river corridor such that:
+A portable adult Atlantic salmon whose **duty cycle and habitat use** match confirmed ethology: stepwise ascent, long energy-saving holds in low-velocity structure, mid-column swimming when moving, positive rheotaxis when station-holding, burst only for hard hydraulics, then recover. Environment and cameras serve that fish target.
 
-1. The fish **samples** a spatially varying current and temperature field (including **real velocity deficits** inside discrete holding lies).
-2. **Behavioral modes** (hold / cruise / burst / seek holding lie) change kinematics and energy use; tired / high-flow fish **prefer lies**.
-3. Hydrodynamics give plausible **station-holding**, **slip**, and **burst** against flow at order-of-magnitude adult scales (~0.7–0.8 m length, few m/s burst).
-4. **Hard containment** keeps the body inside the wet corridor: bed, banks, and free surface use push-out + kill inward normal velocity (no wall tunneling / surface breach in post-state).
-5. A **headless accuracy harness** (`npm run test:accuracy`) gates regressions on hold slip, lie-seeking, upstream DMG, burst fatigue, stability, and **containment** (time above surface ≈ 0; post-state OOB ≈ 0) — without WebGL/DOM.
-6. Cameras support observation (follow + fish-eye). Fish-eye is head-mounted, hides the fish mesh via layers, and clears to an underwater tint (not black void).
+## Confirmed behavior (research baseline)
 
-v1.2a success is **qualitative behavioral fidelity + hard corridor integrity + automated scenario checks**, not CFD-validated swimming or stock-specific phenology.
+Sources used for planning (not claimed as “implemented”):
 
-## Gap
+| Finding | Implication for the sim | Key refs |
+|--------|-------------------------|----------|
+| Migration is **phased**: migratory (direct or **stepwise** with stops) → search near spawn → **long holding** with little/no movement | Modes must be duty-cycled (move → hold), not continuous cruise | Økland et al. 2001 (*J Fish Biol*, River Tana) |
+| Much of freshwater residence is **holding in pools**; whole-migration mean swim effort can be ~**0.1 BL s⁻¹** effective | Holding is the default energy strategy; continuous high thrust is wrong | Bernatchez & Dodson 1987; Lennox et al. 2018; Richard et al. 2014 |
+| Ground speeds on ascent often **~0.4–11 km day⁻¹** (site-dependent; e.g. mean ~2.6 km day⁻¹ in one Alta study) | Net upstream progress is slow vs body-length swim speed | Heggberget / Alta telemetry summaries |
+| Holding habitat: **slow water**, pools, **boulders / bank structure**; observed prefs often ~**0.15–0.3 m s⁻¹** local velocity, not the high-velocity core | Lies must be real low-V pockets; fish should seek them to economize | Salmon-peloton / hydraulic habitat observations; Crisp 1996 (context) |
+| Ascending adults often swim **~1–4 m below surface** (site-dependent), not glued to bed or surface | Prefer **mid-column** when migrating; near-bed only when using structure | Kemijoki tailrace telemetry (pressure tags) |
+| **Positive rheotaxis** for position holding facing into flow | Hold = cancel slip, head into current | Standard rheotaxis / station-holding |
+| Avoid **abrupt hydraulic change** when relocating (shown strongly in kelts; lateral-line relevant) | Don’t thrash across shear; prefer similar V / moderate eddies | Simmons et al. (kelt hydraulics, *J Fish Biol*) |
+| Gait: sustain aerobic ~**≤1.5 BL s⁻¹**; anaerobic transition ~**>2 BL s⁻¹**; short bursts for obstacles then recover | Burst is rare and costly; then hold/recover | Adult salmon swim-performance reviews (e.g. CJFAS 2023 review context) |
+| Adults **cease feeding**; **activity** dominates energy burn vs modest warming | Fatigue must punish continuous burst/cruise more than temperature alone | Lennox et al. 2018 *Freshwater Biology* |
+| Heat stress can shift fish toward cooler / lower-V refugia | Temp is a **later** multiplier on hold/seek, not v1.3 core | Thermoregulation / refuge studies |
 
-| Area | What we have | What’s missing / wrong |
-|------|----------------|-------------------------|
-| Hydrodynamics | Lumped buoyancy, quadratic drag, thrust + simple torque coupling; hard wall velocity kill | No added-mass, no vortex wake, **no soft near-wall hydro**; thrust curve not fitted to force plates / CFD |
-| Body / fins | Wired fins with amp/phase constraints; caudal coupled to lateral thrust | No muscle activation, no undulatory body wave as force generator, no fin–fin interference |
-| Current field | Analytic core + bank shear + **hard lie pockets** (pool / bank scallop / boulder wake deficits) | No real bathymetry, gauge data, or CFD; pocket shapes are schematic |
-| Temperature | Coarse season+lat base with bank/bed gradients | No diurnal cycle, stratification physics, or measured thermal refugia |
-| Decisions | Sense → mode select; lie preference; weak rheotaxis; light pitch bias from bed/surface clearance | **No deeper avoidance planner** / mid-column rewrite; no olfactory plume, predators, or dam/weir negotiation |
-| Energetics | Mode drain + flow-scaled ascent cost; better recover in lies; burst thrust caps with fatigue | Not calibrated to oxygen debt or measured ascent budgets |
-| Collision | **Hard** bed / bank / free-surface clamp + inward-velocity kill | Scrapes still register as penetration *events* when pressed into a wall; no complex structure mesh |
-| Cameras | Follow + head-mounted fish-eye (layers, underwater clear) | Distortion is stylized, not measured fish optics |
-| Harness | Fixed-seed scenarios + baseline thresholds incl. containment | Thresholds are order-of-magnitude, not field-validated |
+**What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-**Do not treat HUD speeds or forces as measured values.**
+## Gap vs current build (v1.2a)
 
-## Next strategy
+| Ethology target | Current sim | Gap |
+|-----------------|-------------|-----|
+| Stepwise move/hold duty cycle | Modes exist but often look like restless cruise | Need explicit migratory vs hold phases + hysteresis |
+| Near-zero ground speed in lies | Hold reduces slip but not “pool motionless” | Stronger hold thrust-matching + long hold residency |
+| Mid-column when moving | Hard clamps only; weak clearance bias | Anticipatory depth/bank preference |
+| Low-V structure selection | Hard lie pockets + seek_hold | OK scaffold; needs hydraulic gradients (v1.4) |
+| Burst then recover | Burst mode + energy drain | Tie burst to obstacle/high-V only; longer recover-in-lie |
+| Fish-eye observation | **Black screen** (RT post-process) | Sidecar fix — not an ethology item |
 
-1. **Keep the harness green** when changing hydro/decisions — extend scenarios before loosening thresholds.
-2. **Deferred (explicit):** deeper mid-column avoidance / soft near-wall hydro / CFD / textures / accuracy HUD — not in v1.2a.
-3. **Environment maps:** Replace analytic current with a 2.5D field from a real reach (ADCP / shallow CFD / published vector maps). Keep the same `sample(x,y,z)` API.
-4. **Calibrate fatigue–recovery** to published ascent energetic budgets; expose season/temp as metabolic multipliers.
-5. **Homing upgrade:** Strengthen rheotaxis/olfactory bias with a weak along-corridor gradient before path planning.
-6. **Biomechanics pass:** Traveling-wave body envelope driving thrust; decision layer stays the outer loop.
-7. **Visuals last:** Mesh/materials only after motion and decisions read correctly on mobile-sized viewports.
+## Version plan (toward the goal)
+
+| Version | Focus | Ethology payoff | Exit criteria (headless + your visual check) |
+|---------|--------|-----------------|-----------------------------------------------|
+| **v1.2b** | Fish-eye unblack (direct wide-FOV; clamp POV in free water). **Sidecar, not accuracy core.** | Lets you observe behavior | Fish-eye shows corridor; harness unchanged |
+| **v1.3** | **Duty-cycle migration + mid-water behavior** | Matches stepwise ascent + mid-column + anticipatory avoidance | ↑ time-in-hold; ↑ time mid-column; ↓ scrape rate; hold slip≈0 in lies; DMG only during migratory bouts |
+| **v1.4** | Richer hydraulic field (same `sample()` API): shear, pools, boulder wakes as continuous gradients | Makes lie choice physically motivated | Lie occupancy correlates with local V deficit; avoid high-V core when holding |
+| **v1.5** | Fatigue / temp metabolic multipliers (OOM from Lennox-style curves) | Activity cost ≫ mild temp cost | Continuous cruise drains faster than hold; temp scales drain modestly |
+| **v1.6** | Undulatory / biomechanics thrust | Body motion generates force | Gait metrics; still decision-outer-loop |
+| **Later** | Olfactory/homing lite, thermoregulatory refuge shifts, ocean/estuary packs, visuals | Expand habitat without rewriting fish | Portable fish + env packs |
+
+**Explicitly deferred until listed version:** soft-wall hydro, CFD site maps before v1.4, barrel-distortion polish, textures, in-app accuracy overlay.
+
+## Strategy (one line)
+
+Unblack the camera → make the fish **hold and move like telemetry says** (v1.3) → give it **truer hydraulics** (v1.4) → calibrate **energy** (v1.5) → then biomechanics/visuals.
 
 ## Headless harness
 
@@ -47,14 +59,12 @@ v1.2a success is **qualitative behavioral fidelity + hard corridor integrity + a
 npm run test:accuracy
 ```
 
-Runs Node-only (`tsx`) scenarios under `tests/accuracy/` with seeds/dt fixed, writes metrics JSON to `tests/scenarios/`, and fails if results miss `tests/baselines/thresholds.json`. Core loop is `CoreSim.step()` — shared with the browser, no renderer.
-
-Scenarios include `containment` (near-surface / near-bank start): post-containment time above surface and OOB must stay ≈ 0; bank/bed/surface penetration *events* are allowed scrapes but capped.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation.
 
 ## Live demo
 
-Observational demo: [https://riverstarship.github.io/asalmonsim/](https://riverstarship.github.io/asalmonsim/). Repo may be temporarily public for free-plan Pages.
+https://riverstarship.github.io/asalmonsim/ — repo may be temporarily public for free-plan Pages.
 
-## UI note
+## UI
 
-Info/HUD card is **toggleable** (Hide/Show info). Camera buttons remain. There is **no** in-app accuracy overlay — see this file and the harness.
+Toggleable HUD only. No in-app accuracy overlay.
