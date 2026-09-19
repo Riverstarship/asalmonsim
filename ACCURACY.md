@@ -36,6 +36,11 @@ v1 success is **qualitative behavioral fidelity**, not CFD-validated swimming or
 4. **Biomechanics pass:** Introduce a traveling-wave body envelope driving thrust; keep decision layer as the outer loop.
 5. **Visuals last:** Improve mesh/materials only after motion and decisions read correctly on mobile-sized viewports.
 
+
+## Live demo
+
+Observational demo is published at [https://riverstarship.github.io/asalmonsim/](https://riverstarship.github.io/asalmonsim/). Repo is temporarily public for Pages testing on free GitHub; private again after testing disables free Pages.
+
 ## Overlay (in-app)
 
 The on-screen accuracy panel mirrors a short form of **Goal / Gap / Strategy** so observers never confuse the demo for a validated bioenergetic model.

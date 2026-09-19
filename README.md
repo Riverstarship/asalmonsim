@@ -2,6 +2,15 @@
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and accuracy overlay only.
 
+
+## Live demo
+
+**Public site (temporary for testing):** [https://riverstarship.github.io/asalmonsim/](https://riverstarship.github.io/asalmonsim/)
+
+The repository is **temporarily public** so GitHub Pages can serve the demo on a free plan. After testing, you can make it private again — but note that on free GitHub, **private repos lose free Pages** (disable Pages or expect the public site to stop when going private).
+
+CI builds on every push to `main` via `.github/workflows/deploy.yml` (`node_modules` / `dist` stay gitignored).
+
 ## Run
 
 ```bash
