@@ -23,27 +23,33 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer v1.3–v1.6: duty-cycled stepwise ascent; roll cmd mostly automatic.
+ * Decision layer v1.3–v1.8: duty-cycled stepwise ascent; roll cmd mostly automatic.
  * Migratory bout → energy-saving hold (low-V / structure lies) with hysteresis;
  * mid-column preference when migrating; anticipatory bed/bank/surface avoidance;
  * burst only for hard hydraulics / obstacles, then recover in lie.
  * v1.6: activity-dominated metabolic drain + light temp multiplier (Lennox-informed OOM).
+ * v1.8: hold-residency retune — longer holds, stronger migrate→hold hysteresis,
+ * lower default migrate duty, near-zero ground speed / minimal thrust in lies.
  */
 export class DecisionLayer {
   private energy = 1;
   private mode: BehaviorMode = 'cruise';
   private phase: DutyPhase = 'migrate';
   private phaseElapsed = 0;
-  private migrateTarget = 8;
-  private holdTarget = 14;
+  private migrateTarget = 5;
+  private holdTarget = 28;
   private burstCooldown = 0;
   private burstTimer = 0;
   /** Continuous time settled in a good lie (residency). */
   private lieResidency = 0;
   private readonly preferredTemp = 9.5;
   private readonly rng: SeededRng | null;
-  /** Minimum time in a phase before hysteresis allows switching. */
-  private readonly minPhaseHold = 3.2;
+  /** Minimum migrate bout before hold may begin (hysteresis floor). */
+  private readonly minMigrateHold = 3.0;
+  /** Minimum hold bout before migrate may resume (harder to leave). */
+  private readonly minHoldLeave = 8.0;
+  /** Extra residency required in a lie before leaving hold. */
+  private readonly minLieResidency = 6.0;
   /** Harness-only: lock mode (skips selectMode) for fatigue probes. */
   private forceMode: BehaviorMode | null = null;
 
@@ -55,7 +61,7 @@ export class DecisionLayer {
   setEnergy(e: number): void {
     this.energy = THREE.MathUtils.clamp(e, 0.05, 1);
     // Tired fish begin in energy-saving hold, not restless cruise
-    if (this.energy < 0.52) {
+    if (this.energy < 0.62) {
       this.phase = 'hold';
       this.phaseElapsed = 0;
       this.mode = 'hold';
@@ -81,9 +87,9 @@ export class DecisionLayer {
   }
 
   private rollBoutTargets(): void {
-    // Stepwise: migrate progress bouts, then longer energy-saving holds
-    this.migrateTarget = 6.5 + this.rand() * 4.5; // ~6.5–11 s
-    this.holdTarget = 9 + this.rand() * 8; // ~9–17 s
+    // v1.8: short migrate progress bouts, long energy-saving holds (mostly holding)
+    this.migrateTarget = 5.5 + this.rand() * 3.5; // ~5.5–9 s
+    this.holdTarget = 12 + this.rand() * 10; // ~12–22 s
   }
 
   private enterHoldPhase(): void {
@@ -133,16 +139,28 @@ export class DecisionLayer {
 
     switch (this.mode) {
       case 'hold': {
-        // Near-zero ground speed: hydro needs only tiny thrust in lies (deficit shelters).
+        // v1.8: near-zero ground speed in lies — tiny match thrust, strong rheotaxis.
         // Larger baseline overshoots upstream and ejects the fish from the pocket.
         const slip = Math.max(0, -sense.streamwiseGround);
         const surge = Math.max(0, sense.streamwiseGround);
+        const lowV = inLie || sense.flowSpeed < 0.28;
         let match = inLie
-          ? 0.014 + sense.flowSpeed * 0.22
-          : 0.045 + sense.flowSpeed * 0.48;
-        match += slip * 0.34;
-        match -= Math.min(0.2, surge * 0.5);
-        thrust = THREE.MathUtils.clamp(match, 0.01, 0.52);
+          ? 0.004 + sense.flowSpeed * 0.1
+          : lowV
+            ? 0.018 + sense.flowSpeed * 0.26
+            : 0.032 + sense.flowSpeed * 0.38;
+        match += slip * (inLie ? 0.28 : 0.32);
+        match -= Math.min(inLie ? 0.35 : 0.22, surge * (inLie ? 0.85 : 0.55));
+        // Soft brake when already nearly still in a lie
+        if (inLie && Math.abs(sense.streamwiseGround) < 0.12) {
+          match *= 0.55;
+        }
+        thrust = THREE.MathUtils.clamp(match, inLie ? 0.003 : 0.01, inLie ? 0.24 : 0.42);
+        // Strong positive rheotaxis while station-holding
+        if (sense.flowSpeed > 0.03) {
+          const intoFlow = sense.flow.clone().multiplyScalar(-1).normalize();
+          yaw += new THREE.Vector3().crossVectors(forward, intoFlow).y * (inLie ? 0.55 : 0.4);
+        }
         if (nearLie && !inLie) {
           yaw += sense.toHoldingLie.dot(right) * 0.18;
         }
@@ -219,11 +237,14 @@ export class DecisionLayer {
       thrust = Math.min(thrust, 0.36);
     }
 
-    // Hold mode: damp jitter; keep a little bed clearance in the pocket
+    // Hold mode: damp jitter; float slightly off bed; flatten when settled
     if (this.mode === 'hold' && inLie) {
-      pitch *= 0.35;
-      yaw *= 0.55;
-      if (sense.bedClearance < 0.55) pitch += 0.2;
+      pitch *= 0.18;
+      yaw *= 0.4;
+      thrust = Math.min(thrust, 0.2);
+      if (sense.bedClearance < 0.75) pitch += 0.3 + (0.75 - sense.bedClearance) * 0.5;
+      else if (sense.bedClearance > 0.55 && sense.bedClearance < 1.4) pitch *= 0.35;
+      if (sense.surfaceClearance < 0.9) pitch -= 0.12;
     }
 
     // Hard bank escape — break wall-riding chatter that racks scrape counts
@@ -236,9 +257,11 @@ export class DecisionLayer {
     const yawCmd = THREE.MathUtils.clamp(yaw, -1, 1);
     const roll = THREE.MathUtils.clamp(-yawCmd * 0.05, -0.08, 0.08);
 
+    const thrustFloor =
+      this.mode === 'hold' && inLie ? 0.004 : this.mode === 'hold' ? 0.02 : 0.05;
     return {
       mode: this.mode,
-      thrustLevel: THREE.MathUtils.clamp(thrust, 0.05, 1),
+      thrustLevel: THREE.MathUtils.clamp(thrust, thrustFloor, 1),
       pitch: THREE.MathUtils.clamp(pitch, -1, 1),
       yaw: yawCmd,
       roll,
@@ -267,7 +290,7 @@ export class DecisionLayer {
   private anticipatoryPitch(sense: SenseSnapshot, allowNearBed: boolean): number {
     let pitch = 0;
     // Even when using structure, keep a minimum bed buffer to cut scrape chatter
-    const bedStart = allowNearBed ? 0.5 : 1.2;
+    const bedStart = allowNearBed ? 0.72 : 1.2;
     const surfStart = 1.2;
     if (sense.bedClearance < bedStart) {
       pitch += ((bedStart - sense.bedClearance) / Math.max(0.05, bedStart)) * 1.05;
@@ -281,15 +304,16 @@ export class DecisionLayer {
   private selectMode(dt: number, sense: SenseSnapshot): void {
     const inLie = sense.inLie;
 
+    // Burst rare: hard hydraulics / obstacles only, then return to hold / seek lie
     const wantBurst =
       this.burstCooldown <= 0 &&
-      this.energy > 0.5 &&
-      (sense.obstacleAhead > 0.8 || sense.flowSpeed > 1.1 || sense.shear > 0.4);
+      this.energy > 0.58 &&
+      (sense.obstacleAhead > 0.85 || sense.flowSpeed > 1.25 || sense.shear > 0.55);
 
     if (wantBurst && this.mode !== 'burst') {
       this.mode = 'burst';
-      this.burstTimer = 0.7 + this.rand() * 0.45;
-      this.burstCooldown = 3.5;
+      this.burstTimer = 0.55 + this.rand() * 0.35;
+      this.burstCooldown = 5.5;
       return;
     }
 
@@ -302,29 +326,43 @@ export class DecisionLayer {
       return;
     }
 
-    // Settle into structure only during hold phase (or when exhausted).
-    // Do not abort migratory bouts just because a lie is nearby.
-    if (inLie && (this.phase === 'hold' || this.energy < 0.36)) {
-      if (this.phase !== 'hold') this.enterHoldPhase();
+    // Track lie residency during hold (must run before leave-hold check).
+    if (inLie && this.phase === 'hold') {
       this.lieResidency += dt;
+    } else if (!(inLie && this.phase === 'hold')) {
+      // Keep residency while seeking only if we already banked some; else reset
+      if (!inLie) this.lieResidency = 0;
+    }
+
+    // Tired fish drop into hold even mid-migrate (do not abort migrate solely for nearby lie)
+    if (inLie && this.phase === 'migrate' && this.energy < 0.42) {
+      this.enterHoldPhase();
+      this.lieResidency = dt;
       this.mode = 'hold';
       return;
     }
-    if (!(inLie && this.phase === 'hold')) this.lieResidency = 0;
 
-    // --- Duty-cycle transitions (hysteresis) ---
+    // --- Duty-cycle transitions (v1.8 stronger migrate→hold hysteresis) ---
     if (this.phase === 'migrate') {
-      const tired = this.energy < 0.36;
+      const tired = this.energy < 0.48;
       const boutDone =
-        this.phaseElapsed >= this.migrateTarget && this.phaseElapsed >= this.minPhaseHold;
-      if (tired || boutDone) this.enterHoldPhase();
+        this.phaseElapsed >= this.migrateTarget &&
+        this.phaseElapsed >= this.minMigrateHold;
+      // Hard hydraulics end migrate early → seek lie (burst path still separate)
+      const hydraulicsPush =
+        sense.flowSpeed > 1.2 || sense.obstacleAhead > 0.82 || sense.shear > 0.5;
+      if (tired || boutDone || (hydraulicsPush && this.phaseElapsed >= 2.0))
+        this.enterHoldPhase();
     } else {
-      const recovered = this.energy > 0.5;
+      // Leave hold only when recovered + long bout + residency (even while in lie).
+      // Default duty stays holding; ascent still needs occasional migrate windows.
+      const recovered = this.energy > 0.58;
       const boutDone =
-        this.phaseElapsed >= this.holdTarget && this.phaseElapsed >= this.minPhaseHold;
-      // Minimum lie residency when a lie was used; allow leave if bout done without lie
+        this.phaseElapsed >= this.holdTarget &&
+        this.phaseElapsed >= this.minHoldLeave;
       const resided =
-        this.lieResidency >= 3.6 || (this.lieResidency === 0 && boutDone);
+        this.lieResidency >= this.minLieResidency ||
+        (this.lieResidency === 0 && this.phaseElapsed >= this.holdTarget * 1.1);
       if (recovered && boutDone && resided) {
         this.enterMigratePhase();
         this.lieResidency = 0;
@@ -337,8 +375,8 @@ export class DecisionLayer {
       return;
     }
 
-    // Migrate phase
-    if (this.energy < 0.38) {
+    // Migrate phase — low default duty; drop to hold if energy softens
+    if (this.energy < 0.48) {
       this.enterHoldPhase();
       this.mode = inLie ? 'hold' : 'seek_hold';
       return;

@@ -44,10 +44,11 @@ export class BodyWave {
     this.intensity = MathUtils.clamp(intensity, 0, 1);
     this.mode = mode;
 
+    // v1.8: hold nearly motionless — minimal wave/thrust in low-V lies
     const modeAmp =
-      mode === 'burst' ? 1.35 : mode === 'hold' ? 0.22 : mode === 'seek_hold' ? 0.65 : 1;
+      mode === 'burst' ? 1.35 : mode === 'hold' ? 0.12 : mode === 'seek_hold' ? 0.65 : 1;
     const modeOmega =
-      mode === 'burst' ? 1.3 : mode === 'hold' ? 0.45 : mode === 'seek_hold' ? 0.75 : 1;
+      mode === 'burst' ? 1.3 : mode === 'hold' ? 0.32 : mode === 'seek_hold' ? 0.75 : 1;
 
     const i = this.intensity;
     // Peak caudal amp ~0.8–6 cm; hold stays nearly stiff

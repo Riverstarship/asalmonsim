@@ -116,8 +116,14 @@ export class Hydrodynamics {
     const lat = vRel.dot(this._right);
     drag.addScaledVector(this._right, -lat * 40);
 
+    // v1.8: near-neutral static lift so energy-saving holds (near-zero thrust)
+    // do not sink into the bed; tiny thrust still adds a touch of upward bias.
     const buoyForce = (WATER_DENSITY * BODY_VOLUME - FISH_MASS_KG) * 9.81;
-    const buoyancy = new THREE.Vector3(0, buoyForce + cmd.thrustLevel * 2.5, 0);
+    const buoyancy = new THREE.Vector3(
+      0,
+      buoyForce + 2.4 + cmd.thrustLevel * 0.55,
+      0,
+    );
 
     // --- v1.7 undulatory thrust: force from wave power, blended with residual scalar ---
     this.lastWavePower = wave.wavePower;

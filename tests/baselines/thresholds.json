@@ -1,9 +1,9 @@
 {
   "hold_midchannel": {
     "maxHoldDownstreamSlip": 0.75,
-    "minTimeInHold": 7.0,
-    "minHoldFraction": 0.3,
-    "minHoldLowSpeed": 1.5
+    "minTimeInHold": 12.0,
+    "minHoldFraction": 0.55,
+    "minHoldLowSpeed": 12.0
   },
   "seek_lie_when_tired": {
     "mustReachOrOccupyLie": true,
@@ -36,8 +36,8 @@
     "maxOutOfBoundsCount": 0
   },
   "duty_cycle_ethology": {
-    "minHoldFraction": 0.16,
-    "minHoldLowSpeed": 0.5,
+    "minHoldFraction": 0.35,
+    "minHoldLowSpeed": 20.0,
     "minMidColumnMigrateFraction": 0.25,
     "minTimeInCruise": 8.0,
     "maxBankPenetrationEvents": 250,

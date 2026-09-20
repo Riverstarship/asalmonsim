@@ -425,7 +425,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.7 undulatory biomechanics)\n');
+  console.log('asalmonsim accuracy harness (v1.8 hold-residency retune)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });

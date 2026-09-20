@@ -87,6 +87,12 @@ export class Salmon {
 
     this.hydro.integrate(dt, forces, this.orientation, this.position);
 
+    // v1.8: quiet holds bleed residual migrate speed → near-zero ground speed in lies
+    if (this.mode === 'hold' && intensity < 0.28) {
+      const bleed = Math.exp(-4.2 * dt);
+      this.hydro.velocity.multiplyScalar(bleed);
+    }
+
     const { correction, normal, hit, bedHit, bankHit, surfaceHit } =
       river.resolveCollision(this.position, this.bodyRadius);
     this.lastBedHit = bedHit;
