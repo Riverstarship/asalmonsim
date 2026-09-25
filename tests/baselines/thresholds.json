@@ -85,5 +85,13 @@
     "minCruiseWaveFrequency": 0.8,
     "minCruiseWaveThrust": 15.0,
     "minThrustWaveCorrelation": 0.5
+  },
+  "thermorefuge": {
+    "minHoldFraction": 0.25,
+    "minTimeCoolRefugeWarm": 8.0,
+    "minWarmHoldTempDeficit": 0.22,
+    "minWarmOverCoolRefugeFracGap": 0.08,
+    "minWarmOverCoolDeficitGap": 0.06,
+    "maxWarmCoreWarm": 18.0
   }
 }

@@ -179,6 +179,30 @@ export const SCENARIOS: ScenarioDef[] = [
     forceMode: 'hold',
     config: { tempOverrideC: 10 },
   },
+  {
+    id: 'thermorefuge_warm',
+    description:
+      'Heat stress: adult bias toward cooler + lower-V refuge vs mid-channel core',
+    seed: 1190,
+    dt: 1 / 30,
+    duration: 70,
+    start: [0.15, 2.0, 14],
+    initialEnergy: 0.72,
+    dischargeScale: 1.0,
+    config: { tempOverrideC: 17 },
+  },
+  {
+    id: 'thermorefuge_cool',
+    description:
+      'Cool control (same start/seed/flow): little heat-driven refuge bias',
+    seed: 1190,
+    dt: 1 / 30,
+    duration: 70,
+    start: [0.15, 2.0, 14],
+    initialEnergy: 0.72,
+    dischargeScale: 1.0,
+    config: { tempOverrideC: 9 },
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {

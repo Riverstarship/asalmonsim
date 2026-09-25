@@ -114,6 +114,18 @@ export interface CoreMetrics {
   thrustWaveCov: number;
   /** Mean thrustLevel (same as meanThrust) alias for gait report. */
   meanThrustLevel: number;
+  /** Time-weighted mean temp while in hold mode (°C). */
+  meanHoldTempC: number;
+  /** Time-weighted mid-channel temp during hold (°C). */
+  meanHoldMidTempC: number;
+  /** meanHoldMidTempC − meanHoldTempC (positive = holding cooler than mid-channel). */
+  holdTempDeficit: number;
+  /** Seconds in hold in cooler-than-midchannel + low-V pocket. */
+  timeCoolRefuge: number;
+  /** Seconds in hold in warm mid-channel core. */
+  timeWarmCore: number;
+  /** timeCoolRefuge / timeInHold (0 if no hold). */
+  coolRefugeHoldFraction: number;
 }
 
 /**
@@ -171,6 +183,11 @@ export class CoreSim {
   private lieFlowSamples = 0;
   private timeHoldFastCore = 0;
   private tempSum = 0;
+  private holdTempSum = 0;
+  private holdMidTempSum = 0;
+  private holdTempSamples = 0;
+  private timeCoolRefuge = 0;
+  private timeWarmCore = 0;
   private waveAmpSum = 0;
   private waveFreqSum = 0;
   private wavePowerSum = 0;
@@ -305,6 +322,19 @@ export class CoreSim {
       maxWavePower: this.maxWavePower,
       thrustWaveCov: this.steps > 0 ? this.thrustWaveProdSum / this.steps : 0,
       meanThrustLevel: this.steps > 0 ? this.thrustSum / this.steps : 0,
+      meanHoldTempC:
+        this.holdTempSamples > 0 ? this.holdTempSum / this.holdTempSamples : 0,
+      meanHoldMidTempC:
+        this.holdTempSamples > 0 ? this.holdMidTempSum / this.holdTempSamples : 0,
+      holdTempDeficit:
+        this.holdTempSamples > 0
+          ? this.holdMidTempSum / this.holdTempSamples -
+            this.holdTempSum / this.holdTempSamples
+          : 0,
+      timeCoolRefuge: this.timeCoolRefuge,
+      timeWarmCore: this.timeWarmCore,
+      coolRefugeHoldFraction:
+        this.timeInHold > 0 ? this.timeCoolRefuge / this.timeInHold : 0,
     };
   }
 
@@ -405,6 +435,20 @@ export class CoreSim {
       // Fast core: near centreline and local flow within 75% of mid-channel ref
       if (Math.abs(p.x) < 1.8 && snap.flowSpeed > midRef * 0.75) {
         this.timeHoldFastCore += dt;
+      }
+      // v1.9 thermoregulatory refuge occupancy
+      this.holdTempSum += snap.tempC;
+      this.holdMidTempSum += snap.midChannelTempC;
+      this.holdTempSamples += 1;
+      const coolerThanMid = snap.tempC < snap.midChannelTempC - 0.35;
+      const lowV = snap.flowSpeed < 0.38 || inLie;
+      if (coolerThanMid && lowV) this.timeCoolRefuge += dt;
+      if (
+        Math.abs(p.x) < 1.8 &&
+        snap.tempC >= snap.midChannelTempC - 0.2 &&
+        snap.flowSpeed > midRef * 0.65
+      ) {
+        this.timeWarmCore += dt;
       }
     }
     if (inLie) {

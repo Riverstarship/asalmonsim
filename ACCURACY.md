@@ -21,13 +21,13 @@ Sources used for planning (not claimed as “implemented”):
 | Avoid **abrupt hydraulic change** when relocating (shown strongly in kelts; lateral-line relevant) | Don’t thrash across shear; prefer similar V / moderate eddies | Simmons et al. (kelt hydraulics, *J Fish Biol*) |
 | Gait: sustain aerobic ~**≤1.5 BL s⁻¹**; anaerobic transition ~**>2 BL s⁻¹**; short bursts for obstacles then recover | Burst is rare and costly; then hold/recover | Adult salmon swim-performance reviews (e.g. CJFAS 2023 review context) |
 | Adults **cease feeding**; **activity** dominates energy burn vs modest warming | Fatigue must punish continuous burst/cruise more than temperature alone | Lennox et al. 2018 *Freshwater Biology* |
-| Heat stress can shift fish toward cooler / lower-V refugia | Temp is a **light metabolic multiplier** now; refuge seeking still later | Thermoregulation / refuge studies |
+| Heat stress can shift fish toward cooler / lower-V refugia | **v1.9:** heat-stress refuge seeking toward cooler + lower-V; temp still light metabolic mul (v1.6) | Thermoregulation / refuge studies |
 
 **What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-## Gap vs current build (v1.8)
+## Gap vs current build (v1.9)
 
-| Ethology target | Current sim (v1.8) | Gap |
+| Ethology target | Current sim (v1.9) | Gap |
 |-----------------|---------------------|-----|
 | Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; harness `attitude_hydro` (roll ≈ 0°); preserved under v1.7 wave yaw | Pitch still angle-capped (~41°); wave yaw is light only |
 | Stepwise move/hold duty cycle | **v1.8:** longer holds, stronger migrate→hold hysteresis, lower migrate duty; harness holdFrac / low-speed raised | Still OOM vs multi-day telemetry residency (not multi-day wall time) |
@@ -37,8 +37,9 @@ Sources used for planning (not claimed as “implemented”):
 | Burst then recover | Burst only for high flow/obstacle; then hold/seek lie; strong recover in low-V lie | Obstacle sensing still coarse |
 | Anticipatory avoidance | Bank/bed/surface clearance + light turbulence-proxy bias when seeking | Bed scrape counts still O(10²)–O(10³) under hard clamps |
 | Fish-eye observation | **v1.2b:** direct wide-FOV to screen; POV clamped in free water | Barrel distortion deferred (flag default off) |
-| Activity ≫ mild temp energy cost | **v1.6:** `Metabolism.ts` — hold ≪ cruise ≪ burst drain; through-water effort; light Q10≈1.6 temp mul; harness `fatigue_*` + `fatigue_compare` | Not validated kcal / full bioenergetics; no thermoregulatory refuge seeking yet |
+| Activity ≫ mild temp energy cost | **v1.6:** `Metabolism.ts` — hold ≪ cruise ≪ burst drain; through-water effort; light Q10≈1.6 temp mul; harness `fatigue_*` + `fatigue_compare` | Not validated kcal / full bioenergetics |
 | Undulatory thrust from body wave | **v1.7:** carangiform `BodyWave` → hydro thrust + light yaw; caudal/mesh coupled; harness `undulatory_gait_*` + `undulatory_compare` | Not full FSI/CFD or FEM muscle; envelope model only |
+| Thermoregulatory cool / low-V refuge under heat | **v1.9:** heatStress signal; cool/low-V local probes + coolest-lie bias in seek/hold; modest hold duty under heat; harness `thermorefuge_*` + compare | Honest OOM only — not field-validated; TemperatureField synthetic bank/bed cool |
 
 ## Version plan (toward the goal)
 
@@ -51,17 +52,18 @@ Sources used for planning (not claimed as “implemented”):
 | **v1.6** ✓ | Fatigue / temp metabolic multipliers (OOM from Lennox-style curves) | Activity cost ≫ mild temp cost | Continuous cruise drains faster than hold; warm > cool drain modestly; activity gap > ΔT gap |
 | **v1.7** ✓ | Undulatory / biomechanics thrust | Body wave generates force (outer-loop intent unchanged) | Gait metrics; thrust∝wave; attitude/fatigue/hydraulics/duty still green |
 | **v1.8** ✓ | **Hold-residency retune** | Ascending adults mostly motionless in low-V holds | ↑ holdFrac / timeHoldLowSpeed; attitude/undulatory/fatigue/hydraulics/containment green |
-| **Later** | Thermorefuge, olfactory/homing lite, ocean/estuary packs, visuals | Expand habitat / ethology without rewriting fish | Portable fish + env packs |
+| **v1.9** ✓ | **Thermoregulatory refuge** | Under heat stress, bias toward cooler + lower-V bank/bed pockets | `thermorefuge_warm` vs `_cool`: ↑ cool-refuge frac / holdTempDeficit under heat; prior gates green |
+| **Later** | Olfactory/homing lite, ocean/estuary packs, visuals | Expand habitat / ethology without rewriting fish | Portable fish + env packs |
 
-**Explicitly deferred:** real ADCP/CFD / FSI, FEM muscle, barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting, olfactory/homing, thermoregulatory refuge (v1.9), maps packs.
+**Explicitly deferred:** real ADCP/CFD / FSI, FEM muscle, barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting, olfactory/homing, field-validated thermorefuge thresholds, maps packs.
 
 ## Strategy (one line)
 
-Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → calibrate energy / fatigue-temp (v1.6) → undulatory biomechanics (v1.7) → **hold-residency retune (v1.8)** → next: thermorefuge / homing / maps / visuals.
+Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → calibrate energy / fatigue-temp (v1.6) → undulatory biomechanics (v1.7) → hold-residency retune (v1.8) → **thermorefuge (v1.9)** → next: homing / maps / visuals.
 
-## Next (after v1.8)
+## Next (after v1.9)
 
-**v1.9 thermorefuge** (cool / low-V refuge seeking under heat stress) → olfactory/homing lite → ocean/estuary / map packs → visuals (textures, barrel polish). Decisions stay outer-loop; no FEM muscle / full FSI.
+**Olfactory/homing lite** → ocean/estuary / map packs → visuals (textures, barrel polish). Decisions stay outer-loop; no FEM muscle / full FSI.
 
 ## Headless harness
 
@@ -69,7 +71,7 @@ Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude pl
 npm run test:accuracy
 ```
 
-Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.8 raises `holdFrac` / `timeHoldLowSpeed` on duty_cycle / hold scenarios (honest OOM “mostly holding”) on top of v1.7 undulatory + v1.6 fatigue + v1.5 hydraulics + v1.4 attitude gates.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.9 adds thermorefuge warm/cool relative gates on top of v1.8 hold-residency + v1.7 undulatory + v1.6 fatigue + v1.5 hydraulics + v1.4 attitude gates.
 
 ## Live demo
 

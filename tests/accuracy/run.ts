@@ -103,6 +103,14 @@ interface Thresholds {
     minCruiseWaveThrust: number;
     minThrustWaveCorrelation: number;
   };
+  thermorefuge: {
+    minHoldFraction: number;
+    minTimeCoolRefugeWarm: number;
+    minWarmHoldTempDeficit: number;
+    minWarmOverCoolRefugeFracGap: number;
+    minWarmOverCoolDeficitGap: number;
+    maxWarmCoreWarm: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -425,7 +433,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.8 hold-residency retune)\n');
+  console.log('asalmonsim accuracy harness (v1.9 thermoregulatory refuge)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -559,6 +567,44 @@ function main(): void {
       case 'undulatory_gait_hold':
         checks = checkUndulatoryHold(m, thresholds.undulatory_gait);
         break;
+      case 'thermorefuge_warm': {
+        const th = thresholds.thermorefuge;
+        checks = [
+          {
+            ok: m.holdFraction >= th.minHoldFraction,
+            msg: `holdFraction ${m.holdFraction.toFixed(2)} >= ${th.minHoldFraction}`,
+          },
+          {
+            ok: m.timeCoolRefuge >= th.minTimeCoolRefugeWarm,
+            msg: `timeCoolRefuge ${m.timeCoolRefuge.toFixed(2)}s >= ${th.minTimeCoolRefugeWarm}`,
+          },
+          {
+            ok: m.holdTempDeficit >= th.minWarmHoldTempDeficit,
+            msg: `holdTempDeficit ${m.holdTempDeficit.toFixed(2)}°C >= ${th.minWarmHoldTempDeficit}`,
+          },
+          {
+            ok: m.timeWarmCore <= th.maxWarmCoreWarm,
+            msg: `timeWarmCore ${m.timeWarmCore.toFixed(2)}s <= ${th.maxWarmCoreWarm}`,
+          },
+          {
+            ok: m.nanCount === 0,
+            msg: `nanCount ${m.nanCount} === 0`,
+          },
+        ];
+        break;
+      }
+      case 'thermorefuge_cool':
+        checks = [
+          {
+            ok: m.holdFraction >= thresholds.thermorefuge.minHoldFraction * 0.7,
+            msg: `cool holdFraction ${m.holdFraction.toFixed(2)} (control)`,
+          },
+          {
+            ok: m.nanCount === 0,
+            msg: `nanCount ${m.nanCount} === 0`,
+          },
+        ];
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -585,7 +631,10 @@ function main(): void {
         ` holdV=${m.meanHoldFlow.toFixed(3)} midRef=${m.meanHoldMidRefFlow.toFixed(3)}` +
         ` fastCore=${m.timeHoldFastCore.toFixed(1)}s` +
         ` waveP=${m.meanWavePower.toFixed(3)} A=${m.meanWaveAmplitude.toFixed(3)} f=${m.meanWaveFrequency.toFixed(2)}Hz` +
-        ` Fwave=${m.meanWaveThrust.toFixed(1)}N`,
+        ` Fwave=${m.meanWaveThrust.toFixed(1)}N` +
+        ` holdT=${m.meanHoldTempC.toFixed(1)}°C def=${m.holdTempDeficit.toFixed(2)}` +
+        ` coolRef=${m.timeCoolRefuge.toFixed(1)}s warmCore=${m.timeWarmCore.toFixed(1)}s` +
+        ` coolFrac=${m.coolRefugeHoldFraction.toFixed(2)}`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };
@@ -688,6 +737,45 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     summary.undulatory_compare = { ok, checks };
+  }
+
+  // v1.9 comparative: under heat stress, more cool/low-V refuge occupancy than cool control
+  {
+    const th = thresholds.thermorefuge;
+    const warm = (summary.thermorefuge_warm as { metrics: CoreMetrics } | undefined)?.metrics;
+    const cool = (summary.thermorefuge_cool as { metrics: CoreMetrics } | undefined)?.metrics;
+    const checks: Check[] = [];
+    if (!warm || !cool) {
+      checks.push({ ok: false, msg: 'missing thermorefuge scenario metrics for compare' });
+    } else {
+      const fracGap = warm.coolRefugeHoldFraction - cool.coolRefugeHoldFraction;
+      const defGap = warm.holdTempDeficit - cool.holdTempDeficit;
+      checks.push({
+        ok: warm.coolRefugeHoldFraction >= cool.coolRefugeHoldFraction + th.minWarmOverCoolRefugeFracGap,
+        msg: `warm coolRefugeFrac ${warm.coolRefugeHoldFraction.toFixed(2)} >= cool ${cool.coolRefugeHoldFraction.toFixed(2)} + ${th.minWarmOverCoolRefugeFracGap} (gap=${fracGap.toFixed(2)})`,
+      });
+      checks.push({
+        ok: warm.holdTempDeficit >= cool.holdTempDeficit + th.minWarmOverCoolDeficitGap,
+        msg: `warm holdTempDeficit ${warm.holdTempDeficit.toFixed(2)}°C >= cool ${cool.holdTempDeficit.toFixed(2)}°C + ${th.minWarmOverCoolDeficitGap} (gap=${defGap.toFixed(2)})`,
+      });
+      checks.push({
+        ok: warm.timeCoolRefuge > cool.timeCoolRefuge,
+        msg: `warm timeCoolRefuge ${warm.timeCoolRefuge.toFixed(1)}s > cool ${cool.timeCoolRefuge.toFixed(1)}s`,
+      });
+      // Attitude still green under heat-biased seeking
+      const rollDeg = (warm.maxAbsRoll * 180) / Math.PI;
+      checks.push({
+        ok: rollDeg <= 15,
+        msg: `warm maxAbsRoll ${rollDeg.toFixed(1)}° <= 15° (v1.4 preserved)`,
+      });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] thermorefuge_compare`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.thermorefuge_compare = { ok, checks };
   }
 
   const summaryPath = join(METRICS_DIR, '_summary.json');
