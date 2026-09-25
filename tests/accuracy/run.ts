@@ -111,6 +111,15 @@ interface Thresholds {
     minWarmOverCoolDeficitGap: number;
     maxWarmCoreWarm: number;
   };
+  homing: {
+    minMigrateDmgCue: number;
+    minCueAscent: number;
+    minMigrateCueClimb: number;
+    minTimeInCruise: number;
+    minCueOverFlatMigrateDmgGap: number;
+    minCueOverFlatCueAscentGap: number;
+    minHoldFraction: number;
+  };
 }
 
 function loadThresholds(): Thresholds {
@@ -433,7 +442,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.9 thermoregulatory refuge)\n');
+  console.log('asalmonsim accuracy harness (v1.10 olfactory / upstream homing lite)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -605,6 +614,56 @@ function main(): void {
           },
         ];
         break;
+      case 'homing_cue': {
+        const th = thresholds.homing;
+        checks = [
+          {
+            ok: m.migrateDmg >= th.minMigrateDmgCue,
+            msg: `migrateDmg ${m.migrateDmg.toFixed(2)} >= ${th.minMigrateDmgCue}`,
+          },
+          {
+            ok: m.cueAscent >= th.minCueAscent,
+            msg: `cueAscent ${m.cueAscent.toFixed(4)} >= ${th.minCueAscent}`,
+          },
+          {
+            ok: m.migrateCueClimb >= th.minMigrateCueClimb,
+            msg: `migrateCueClimb ${m.migrateCueClimb.toFixed(4)} >= ${th.minMigrateCueClimb}`,
+          },
+          {
+            ok: m.timeInCruise >= th.minTimeInCruise,
+            msg: `timeInCruise ${m.timeInCruise.toFixed(2)} >= ${th.minTimeInCruise}`,
+          },
+          {
+            ok: m.holdFraction >= th.minHoldFraction,
+            msg: `holdFraction ${m.holdFraction.toFixed(2)} >= ${th.minHoldFraction} (residency preserved)`,
+          },
+          {
+            ok: m.nanCount === 0,
+            msg: `nanCount ${m.nanCount} === 0`,
+          },
+        ];
+        break;
+      }
+      case 'homing_flat':
+        checks = [
+          {
+            ok: m.timeInCruise >= thresholds.homing.minTimeInCruise * 0.7,
+            msg: `flat timeInCruise ${m.timeInCruise.toFixed(2)} (control)`,
+          },
+          {
+            ok: Math.abs(m.cueAscent) < 0.02,
+            msg: `flat cueAscent ${m.cueAscent.toFixed(4)} ≈ 0 (no gradient)`,
+          },
+          {
+            ok: m.holdFraction >= thresholds.homing.minHoldFraction * 0.7,
+            msg: `flat holdFraction ${m.holdFraction.toFixed(2)} (control)`,
+          },
+          {
+            ok: m.nanCount === 0,
+            msg: `nanCount ${m.nanCount} === 0`,
+          },
+        ];
+        break;
       default:
         checks = [{ ok: false, msg: `unknown scenario ${def.id}` }];
     }
@@ -634,7 +693,9 @@ function main(): void {
         ` Fwave=${m.meanWaveThrust.toFixed(1)}N` +
         ` holdT=${m.meanHoldTempC.toFixed(1)}°C def=${m.holdTempDeficit.toFixed(2)}` +
         ` coolRef=${m.timeCoolRefuge.toFixed(1)}s warmCore=${m.timeWarmCore.toFixed(1)}s` +
-        ` coolFrac=${m.coolRefugeHoldFraction.toFixed(2)}`,
+        ` coolFrac=${m.coolRefugeHoldFraction.toFixed(2)}` +
+        ` odor=${m.meanOdor.toFixed(3)} cueΔ=${m.cueAscent.toFixed(4)}` +
+        ` migCue=${m.migrateCueClimb.toFixed(4)} migDmg=${m.migrateDmg.toFixed(2)}`,
     );
 
     summary[def.id] = { ok, metrics: m, checks };
@@ -776,6 +837,49 @@ function main(): void {
       console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
     }
     summary.thermorefuge_compare = { ok, checks };
+  }
+
+  // v1.10 comparative: natal cue → more upstream migrate DMG / cue ascent than flat control
+  {
+    const th = thresholds.homing;
+    const cue = (summary.homing_cue as { metrics: CoreMetrics } | undefined)?.metrics;
+    const flat = (summary.homing_flat as { metrics: CoreMetrics } | undefined)?.metrics;
+    const checks: Check[] = [];
+    if (!cue || !flat) {
+      checks.push({ ok: false, msg: 'missing homing scenario metrics for compare' });
+    } else {
+      const dmgGap = cue.migrateDmg - flat.migrateDmg;
+      const ascentGap = cue.cueAscent - flat.cueAscent;
+      checks.push({
+        ok: cue.migrateDmg >= flat.migrateDmg + th.minCueOverFlatMigrateDmgGap,
+        msg: `cue migrateDmg ${cue.migrateDmg.toFixed(2)} >= flat ${flat.migrateDmg.toFixed(2)} + ${th.minCueOverFlatMigrateDmgGap} (gap=${dmgGap.toFixed(2)})`,
+      });
+      checks.push({
+        ok: cue.cueAscent >= flat.cueAscent + th.minCueOverFlatCueAscentGap,
+        msg: `cue cueAscent ${cue.cueAscent.toFixed(4)} >= flat ${flat.cueAscent.toFixed(4)} + ${th.minCueOverFlatCueAscentGap} (gap=${ascentGap.toFixed(4)})`,
+      });
+      checks.push({
+        ok: cue.migrateCueClimb > flat.migrateCueClimb,
+        msg: `cue migrateCueClimb ${cue.migrateCueClimb.toFixed(4)} > flat ${flat.migrateCueClimb.toFixed(4)}`,
+      });
+      // Hold residency / attitude preserved under cue bias
+      checks.push({
+        ok: cue.holdFraction >= th.minHoldFraction,
+        msg: `cue holdFraction ${cue.holdFraction.toFixed(2)} >= ${th.minHoldFraction}`,
+      });
+      const rollDeg = (cue.maxAbsRoll * 180) / Math.PI;
+      checks.push({
+        ok: rollDeg <= 15,
+        msg: `cue maxAbsRoll ${rollDeg.toFixed(1)}° <= 15° (v1.4 preserved)`,
+      });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] homing_compare`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.homing_compare = { ok, checks };
   }
 
   const summaryPath = join(METRICS_DIR, '_summary.json');

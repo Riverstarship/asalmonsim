@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1.9)
+# Atlantic Salmon Migration Simulator (v1.10)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
 
@@ -59,9 +59,9 @@ hydro → env → decisions → cameras → look
 | Body wave | `src/fish/BodyWave.ts` | Carangiform traveling-wave envelope → thrust / caudal / mesh bend |
 | Fins | `src/fish/Fins.ts` | Wired fins; caudal amp/phase locked to body wave (v1.7); pectorals light/visual |
 | Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials; segmented undulatory bend |
-| Env | `src/env/*` | River corridor, **continuous** current field (jet / bank BL / depth / pool & wake gradients), temperature, lie markers |
+| Env | `src/env/*` | River corridor, **continuous** current field (jet / bank BL / depth / pool & wake gradients), temperature, **odor/natal cue (v1.10)**, lie markers |
 | Metabolism | `src/ai/Metabolism.ts` | v1.6 activity-dominated drain + light temp multiplier (Lennox-informed OOM) |
-| AI | `src/ai/*` | Sense → duty-cycled migrate/hold (**v1.8** residency); **v1.9 thermorefuge** under heat; mid-column cruise; anticipatory avoidance; **v1.6 metabolism** |
+| AI | `src/ai/*` | Sense → duty-cycled migrate/hold (**v1.8** residency); **v1.9 thermorefuge**; **v1.10 olfactory/homing lite**; mid-column cruise; anticipatory avoidance; **v1.6 metabolism** |
 | Cameras | `src/cameras/*` | Follow/chase + fish-eye wide-FOV (direct render) |
 | UI | `src/ui/*` | Camera buttons + toggleable HUD (no accuracy overlay) |
 | Core | `src/sim/CoreSim.ts` | Headless step loop (sense→decide→integrate) |

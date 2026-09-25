@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DEFAULT_CONFIG, type SimConfig } from '../config';
 import { RiverEnvironment } from '../env/River';
+import type { OdorMode } from '../env/OdorField';
 import { Salmon } from '../fish/Salmon';
 import { Hydrodynamics } from '../fish/Hydrodynamics';
 import { DecisionLayer, type DecisionOutput } from '../ai/DecisionLayer';
@@ -18,6 +19,8 @@ export interface CoreSimOptions {
   initialEnergy?: number;
   /** Harness: lock DecisionLayer mode for metabolic probes. */
   forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
+  /** Natal cue mode (v1.10). Default 'natal'; use 'flat' for control. */
+  odorMode?: OdorMode;
 }
 
 export interface CoreMetrics {
@@ -126,6 +129,17 @@ export interface CoreMetrics {
   timeWarmCore: number;
   /** timeCoolRefuge / timeInHold (0 if no hold). */
   coolRefugeHoldFraction: number;
+  /** Mean natal cue concentration. */
+  meanOdor: number;
+  /** Start / end cue concentration. */
+  startOdor: number;
+  endOdor: number;
+  /** Net cue climb over run (end − start; positive = toward natal source). */
+  cueAscent: number;
+  /** Cue climb accumulated only during migratory cruise/burst. */
+  migrateCueClimb: number;
+  /** Mean |toHome| streamwise component during migrate (m remaining proxy). */
+  meanMigrateHomeZ: number;
 }
 
 /**
@@ -188,6 +202,14 @@ export class CoreSim {
   private holdTempSamples = 0;
   private timeCoolRefuge = 0;
   private timeWarmCore = 0;
+  private odorSum = 0;
+  private startOdor = 0;
+  private endOdor = 0;
+  private odorInitialized = false;
+  private migrateCueClimb = 0;
+  private prevOdor = 0;
+  private migrateHomeZSum = 0;
+  private migrateHomeZSamples = 0;
   private waveAmpSum = 0;
   private waveFreqSum = 0;
   private wavePowerSum = 0;
@@ -207,7 +229,10 @@ export class CoreSim {
     const headless = opts.headless ?? false;
     const seed = opts.seed ?? 42;
     this.rng = new SeededRng(seed);
-    this.river = new RiverEnvironment(cfg, { visual: !headless });
+    this.river = new RiverEnvironment(cfg, {
+      visual: !headless,
+      odorMode: opts.odorMode ?? 'natal',
+    });
     const start = opts.startPosition?.clone() ?? new THREE.Vector3(0, 1.2, 8);
     this.fish = new Salmon(start, { visual: !headless });
     this.decisions = new DecisionLayer(this.rng);
@@ -335,6 +360,15 @@ export class CoreSim {
       timeWarmCore: this.timeWarmCore,
       coolRefugeHoldFraction:
         this.timeInHold > 0 ? this.timeCoolRefuge / this.timeInHold : 0,
+      meanOdor: this.steps > 0 ? this.odorSum / this.steps : 0,
+      startOdor: this.startOdor,
+      endOdor: this.endOdor,
+      cueAscent: this.endOdor - this.startOdor,
+      migrateCueClimb: this.migrateCueClimb,
+      meanMigrateHomeZ:
+        this.migrateHomeZSamples > 0
+          ? this.migrateHomeZSum / this.migrateHomeZSamples
+          : 0,
     };
   }
 
@@ -352,6 +386,15 @@ export class CoreSim {
     this.thrustSum += decision.thrustLevel;
     this.flowSum += snap.flowSpeed;
     this.tempSum += snap.tempC;
+    this.odorSum += snap.odor;
+    if (!this.odorInitialized) {
+      this.startOdor = snap.odor;
+      this.prevOdor = snap.odor;
+      this.odorInitialized = true;
+    }
+    this.endOdor = snap.odor;
+    const dOdor = snap.odor - this.prevOdor;
+    this.prevOdor = snap.odor;
     this.maxThrust = Math.max(this.maxThrust, decision.thrustLevel);
     this.minEnergy = Math.min(this.minEnergy, decision.energy);
     this.maxEnergy = Math.max(this.maxEnergy, decision.energy);
@@ -407,12 +450,18 @@ export class CoreSim {
         this.timeInBurst += dt;
         this.timeMigrate += dt;
         this.migrateDmg += dz;
+        this.migrateCueClimb += dOdor;
+        this.migrateHomeZSum += snap.toHome.z;
+        this.migrateHomeZSamples += 1;
         if (midColumn) this.timeMidColumnMigrate += dt;
         break;
       case 'cruise':
         this.timeInCruise += dt;
         this.timeMigrate += dt;
         this.migrateDmg += dz;
+        this.migrateCueClimb += dOdor;
+        this.migrateHomeZSum += snap.toHome.z;
+        this.migrateHomeZSamples += 1;
         if (midColumn) this.timeMidColumnMigrate += dt;
         break;
     }

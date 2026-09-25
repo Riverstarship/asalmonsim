@@ -93,5 +93,14 @@
     "minWarmOverCoolRefugeFracGap": 0.08,
     "minWarmOverCoolDeficitGap": 0.06,
     "maxWarmCoreWarm": 18.0
+  },
+  "homing": {
+    "minMigrateDmgCue": 3.0,
+    "minCueAscent": 0.02,
+    "minMigrateCueClimb": 0.015,
+    "minTimeInCruise": 6.0,
+    "minCueOverFlatMigrateDmgGap": 0.35,
+    "minCueOverFlatCueAscentGap": 0.02,
+    "minHoldFraction": 0.2
   }
 }

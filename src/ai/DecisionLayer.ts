@@ -23,7 +23,7 @@ export interface DecisionOutput {
 }
 
 /**
- * Decision layer v1.3–v1.9: duty-cycled stepwise ascent; roll cmd mostly automatic.
+ * Decision layer v1.3–v1.10: duty-cycled stepwise ascent; roll cmd mostly automatic.
  * Migratory bout → energy-saving hold (low-V / structure lies) with hysteresis;
  * mid-column preference when migrating; anticipatory bed/bank/surface avoidance;
  * burst only for hard hydraulics / obstacles, then recover in lie.
@@ -32,6 +32,9 @@ export interface DecisionOutput {
  * lower default migrate duty, near-zero ground speed / minimal thrust in lies.
  * v1.9: thermoregulatory refuge — under heat stress, bias seek/hold toward cooler
  * + lower-V bank/bed pockets; modestly raise hold tendency (cool baseline unchanged).
+ * v1.10: olfactory / upstream homing lite — migrate cruise (and light seek when not
+ * heat-dominated) bias yaw/thrust toward increasing natal cue; never overrides
+ * hold-in-lie or strong heat-refuge.
  */
 export class DecisionLayer {
   private energy = 1;
@@ -215,10 +218,20 @@ export class DecisionLayer {
             pitch += dp;
           });
         }
+        // v1.10: natal-cue / upstream homing — prefer ascending cue gradient
+        // Heat refuge still wins when strongly stressed; otherwise cue steers lightly
+        if (hs < 0.55) {
+          const homeGain = this.applyHomingSteer(sense, forward, right, upstream, 0.75 - hs * 0.5);
+          yaw += homeGain.yaw;
+          pitch += homeGain.pitch;
+          thrust = Math.min(1, thrust + homeGain.thrust);
+        }
         rationale =
           hs > 0.35
             ? 'Migratory bout — heat-biased path'
-            : 'Migratory bout — mid-column cruise';
+            : sense.odorStrength > 0.08
+              ? 'Migratory bout — cue-biased cruise'
+              : 'Migratory bout — mid-column cruise';
         break;
       }
       case 'burst': {
@@ -260,6 +273,12 @@ export class DecisionLayer {
         // v1.5: light avoid-abrupt-change bias (turbulence proxy)
         if (sense.turbulence > 0.55 && sense.holdingLieDist > sense.lieRadius) {
           yaw += -Math.sign(sense.lateralX || 0.01) * (sense.turbulence - 0.55) * 0.12;
+        }
+        // v1.10: light cue bias while relocating — never when heat-dominated
+        if (hs < 0.28 && sense.odorStrength > 0.05) {
+          const homeGain = this.applyHomingSteer(sense, forward, right, upstream, 0.18);
+          yaw += homeGain.yaw;
+          pitch += homeGain.pitch * 0.4;
         }
         rationale =
           hs > 0.25
@@ -361,6 +380,40 @@ export class DecisionLayer {
     // Prefer bedward component when probes point cooler/lower
     const pitchMul = dir.y < 0 ? 1.15 : 0.75;
     apply(dir.dot(right) * gain, dir.y * gain * pitchMul);
+  }
+
+  /**
+   * v1.10 olfactory / rheotaxis-lite: bias toward natal cue / upstream when
+   * a gradient is available. Does not run inside settled holds (caller gates).
+   */
+  private applyHomingSteer(
+    sense: SenseSnapshot,
+    forward: THREE.Vector3,
+    right: THREE.Vector3,
+    upstream: THREE.Vector3,
+    weight: number,
+  ): { yaw: number; pitch: number; thrust: number } {
+    const out = { yaw: 0, pitch: 0, thrust: 0 };
+    if (weight <= 0 || sense.odorStrength < 0.02) return out;
+    const str = THREE.MathUtils.clamp(sense.odorStrength, 0, 1);
+    // Light OOM bias — must not flatten hold residency (duty_cycle gate)
+    const gain = weight * (0.18 + str * 0.38);
+    if (sense.toHome.lengthSq() > 1e-6) {
+      const dir = sense.toHome.clone().normalize();
+      // Prefer streamwise (+Z); damp lateral so we don't wall-seek
+      const flat = new THREE.Vector3(dir.x * 0.22, 0, Math.max(0.2, dir.z));
+      if (flat.lengthSq() > 1e-8) flat.normalize();
+      out.yaw += flat.dot(right) * gain;
+      out.yaw += new THREE.Vector3().crossVectors(forward, upstream).y * gain * 0.42;
+      out.pitch += dir.y * gain * 0.08;
+      // Tiny thrust nudge only — activity cost still dominates (v1.6)
+      if (dir.z > 0.25 && this.energy > 0.55) {
+        out.thrust = 0.015 + str * 0.035 * weight;
+      }
+    } else {
+      out.yaw += new THREE.Vector3().crossVectors(forward, upstream).y * gain * 0.15;
+    }
+    return out;
   }
 
   /** Mid water-column bias when migrating (~45–55% of free column). */

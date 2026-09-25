@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RIVER } from '../config';
 import { CurrentField, type LiePocket } from './CurrentField';
 import { TemperatureField } from './Temperature';
+import { OdorField, type OdorMode } from './OdorField';
 import type { SimConfig } from '../config';
 
 export interface HoldingLie {
@@ -14,6 +15,8 @@ export interface HoldingLie {
 export interface RiverOptions {
   /** Build Three.js corridor mesh (browser). Default true. */
   visual?: boolean;
+  /** Natal cue field mode (v1.10). Default 'natal'. */
+  odorMode?: OdorMode;
 }
 
 export interface CollisionResult {
@@ -36,6 +39,7 @@ export class RiverEnvironment {
   readonly group = new THREE.Group();
   readonly current: CurrentField;
   readonly temperature: TemperatureField;
+  readonly odor: OdorField;
   readonly holdingLies: HoldingLie[];
 
   constructor(cfg: SimConfig, opts: RiverOptions = {}) {
@@ -86,6 +90,7 @@ export class RiverEnvironment {
 
     this.current = new CurrentField(cfg, pockets);
     this.temperature = new TemperatureField(cfg);
+    this.odor = new OdorField(opts.odorMode ?? 'natal');
     if (visual) this.buildMesh();
   }
 

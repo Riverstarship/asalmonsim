@@ -36,6 +36,12 @@ export interface SenseSnapshot {
   /** Vector toward coolest / lowest-V holding lie (may differ from nearest). */
   toCoolLie: THREE.Vector3;
   coolLieDist: number;
+  /** Local natal / olfactory cue concentration (0–1). */
+  odor: number;
+  /** Vector toward higher cue / natal source (zero when flat). */
+  toHome: THREE.Vector3;
+  /** Decision weight for homing (0 when flat / far). */
+  odorStrength: number;
   energy: number;
   groundSpeed: number;
   /** Lateral position (m); sign used for bank avoidance toward centre. */
@@ -53,6 +59,7 @@ function habitatScore(tempC: number, flowSpeed: number): number {
  * Sense flow, temperature, obstacles — feeds decision layer.
  * Flow speeds inside lies reflect real velocity deficits from CurrentField.
  * v1.9: local cool/low-V probes + coolest-lie vector for thermoregulatory refuge.
+ * v1.10: natal / olfactory cue concentration + toHome vector.
  */
 export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const p = fish.position;
@@ -129,9 +136,14 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
   const toCoolLie = coolLie.position.clone().sub(p);
   const coolLieDist = toCoolLie.length();
 
+  const flowSpeed = flow.length();
+  const odor = river.odor.sample(p.x, p.y, p.z, flowSpeed);
+  const toHome = river.odor.toHome(p.x, p.y, p.z);
+  const odorStrength = river.odor.strength(p.x, p.y, p.z, flowSpeed);
+
   return {
     flow,
-    flowSpeed: flow.length(),
+    flowSpeed,
     shear,
     turbulence,
     tempC,
@@ -148,6 +160,9 @@ export function sense(fish: Salmon, river: RiverEnvironment): SenseSnapshot {
     refugeAdvantage,
     toCoolLie,
     coolLieDist,
+    odor,
+    toHome,
+    odorStrength,
     energy: fish.energy,
     groundSpeed: fish.groundSpeed,
     lateralX: p.x,

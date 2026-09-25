@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DEFAULT_CONFIG, type SimConfig } from '../../src/config';
 import { CoreSim, type CoreMetrics } from '../../src/sim/CoreSim';
+import type { OdorMode } from '../../src/env/OdorField';
 
 export interface ScenarioDef {
   id: string;
@@ -15,6 +16,8 @@ export interface ScenarioDef {
   config?: Partial<SimConfig>;
   /** Harness: lock DecisionLayer mode for metabolic probes. */
   forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
+  /** Natal cue mode (v1.10); 'flat' = control with no gradient. */
+  odorMode?: OdorMode;
 }
 
 export const SCENARIOS: ScenarioDef[] = [
@@ -203,6 +206,32 @@ export const SCENARIOS: ScenarioDef[] = [
     dischargeScale: 1.0,
     config: { tempOverrideC: 9 },
   },
+  {
+    id: 'homing_cue',
+    description:
+      'Natal olfactory cue on: migrate bouts climb cue / accumulate upstream DMG',
+    seed: 1210,
+    dt: 1 / 30,
+    duration: 55,
+    start: [0.25, 1.85, 7],
+    initialEnergy: 0.92,
+    dischargeScale: 1.15,
+    odorMode: 'natal',
+    config: { tempOverrideC: 10 },
+  },
+  {
+    id: 'homing_flat',
+    description:
+      'Flat-cue control (same seed/start): weaker cue ascent / less cue-biased climb',
+    seed: 1210,
+    dt: 1 / 30,
+    duration: 55,
+    start: [0.25, 1.85, 7],
+    initialEnergy: 0.92,
+    dischargeScale: 1.15,
+    odorMode: 'flat',
+    config: { tempOverrideC: 10 },
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {
@@ -218,6 +247,7 @@ export function runScenario(def: ScenarioDef): CoreMetrics {
     startPosition: new THREE.Vector3(...def.start),
     initialEnergy: def.initialEnergy,
     forceMode: def.forceMode,
+    odorMode: def.odorMode,
   });
   return sim.run(def.duration, def.dt);
 }
