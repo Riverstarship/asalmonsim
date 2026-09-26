@@ -25,13 +25,21 @@ export class Simulation {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // v1.12: mobile-aware — awareness > polish; cap DPR/shadows on phones
+    const mobile =
+      typeof navigator !== 'undefined' &&
+      /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !mobile,
+      powerPreference: mobile ? 'low-power' : 'high-performance',
+    });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
     this.renderer.setSize(w, h);
     this.renderer.setClearColor(UNDERWATER_TINT, 1);
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = mobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.08;
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -77,7 +85,10 @@ export class Simulation {
     const sun = new THREE.DirectionalLight(0xc8e0ff, 1.1);
     sun.position.set(8, 20, 10);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    const mobile =
+      typeof navigator !== 'undefined' &&
+      /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    sun.shadow.mapSize.set(mobile ? 512 : 1024, mobile ? 512 : 1024);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 60;
     sun.shadow.camera.left = -20;
@@ -111,6 +122,7 @@ export class Simulation {
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
     const decision = this.core.step(dt);
+    this.core.river.scrollWater(dt);
 
     this.follow.update(dt, this.core.fish);
     this.fishEye.update(dt, this.core.fish, this.core.river);

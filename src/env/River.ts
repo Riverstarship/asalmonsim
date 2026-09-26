@@ -4,6 +4,7 @@ import { CurrentField, type LiePocket } from './CurrentField';
 import { TemperatureField } from './Temperature';
 import { OdorField, type OdorMode } from './OdorField';
 import { getEnvPack, type EnvPack } from './packs';
+import { createRiverMaps } from './RiverTextures';
 
 export interface HoldingLie {
   position: THREE.Vector3;
@@ -93,8 +94,11 @@ export class RiverEnvironment {
     const L = this.length;
     const W = this.width;
     const D = this.depth;
+    const maps = createRiverMaps();
+    this.group.userData.riverMaps = maps;
 
-    const bedGeo = new THREE.PlaneGeometry(W + 4, L, 24, 48);
+    // Slightly denser bed for gravel read; still modest for mobile
+    const bedGeo = new THREE.PlaneGeometry(W + 4, L, 32, 64);
     bedGeo.rotateX(-Math.PI / 2);
     const pos = bedGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -109,9 +113,11 @@ export class RiverEnvironment {
     pos.needsUpdate = true;
     bedGeo.computeVertexNormals();
     const bedMat = new THREE.MeshStandardMaterial({
-      color: 0x3a4a38,
-      roughness: 0.92,
-      metalness: 0.05,
+      map: maps.bedAlbedo,
+      roughnessMap: maps.bedRoughness,
+      color: 0xffffff,
+      roughness: 0.9,
+      metalness: 0.04,
     });
     const bed = new THREE.Mesh(bedGeo, bedMat);
     bed.position.set(0, 0, L * 0.5);
@@ -119,8 +125,9 @@ export class RiverEnvironment {
     this.group.add(bed);
 
     const bankMat = new THREE.MeshStandardMaterial({
-      color: 0x4a5a3a,
-      roughness: 0.95,
+      map: maps.bankAlbedo,
+      color: 0xffffff,
+      roughness: 0.94,
       metalness: 0.02,
     });
     for (const side of [-1, 1]) {
@@ -131,21 +138,30 @@ export class RiverEnvironment {
       this.group.add(bank);
     }
 
-    const waterGeo = new THREE.PlaneGeometry(W, L, 1, 1);
+    // Water: normal + soft foam, no expensive transmission (mobile-friendly)
+    const waterGeo = new THREE.PlaneGeometry(W * 0.98, L, 8, 24);
     waterGeo.rotateX(-Math.PI / 2);
     const waterMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1a4a5a,
+      color: 0x1a5570,
       transparent: true,
-      opacity: 0.35,
-      roughness: 0.15,
-      metalness: 0.1,
-      transmission: 0.4,
-      thickness: 1.5,
+      opacity: 0.38,
+      roughness: 0.22,
+      metalness: 0.05,
+      clearcoat: 0.55,
+      clearcoatRoughness: 0.28,
+      normalMap: maps.waterNormal,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      emissive: new THREE.Color(0x0a2030),
+      emissiveMap: maps.waterFoam,
+      emissiveIntensity: 0.22,
       side: THREE.DoubleSide,
+      depthWrite: false,
     });
     const water = new THREE.Mesh(waterGeo, waterMat);
     water.position.set(0, D * 0.95, L * 0.5);
+    water.renderOrder = 2;
     this.group.add(water);
+    this.group.userData.waterMat = waterMat;
 
     for (const lie of this.holdingLies) {
       const color =
@@ -153,11 +169,21 @@ export class RiverEnvironment {
       const lieMat = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.28,
+        opacity: 0.22,
       });
       const m = new THREE.Mesh(new THREE.SphereGeometry(lie.radius * 0.55, 12, 8), lieMat);
       m.position.copy(lie.position);
       this.group.add(m);
+    }
+  }
+
+  /** Optional: scroll water normals slowly (called from Simulation frame). */
+  scrollWater(dt: number): void {
+    const maps = this.group.userData.riverMaps as { waterNormal?: THREE.Texture; waterFoam?: THREE.Texture } | undefined;
+    if (!maps?.waterNormal) return;
+    maps.waterNormal.offset.y = (maps.waterNormal.offset.y + dt * 0.035) % 1;
+    if (maps.waterFoam) {
+      maps.waterFoam.offset.y = (maps.waterFoam.offset.y + dt * 0.02) % 1;
     }
   }
 

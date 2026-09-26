@@ -122,6 +122,8 @@ export class FinController {
     switch (fin.id) {
       case 'caudal':
         fin.mesh.rotation.y = fin.angle;
+        // Soft lateral tip travel with beat (thrust read; visual only)
+        fin.mesh.position.x = Math.sin(fin.angle) * 0.02;
         break;
       case 'dorsal':
         fin.mesh.rotation.z = fin.angle * 0.5;

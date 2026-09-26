@@ -44,7 +44,8 @@ export class BodyWave {
     this.intensity = MathUtils.clamp(intensity, 0, 1);
     this.mode = mode;
 
-    // v1.8: hold nearly motionless — minimal wave/thrust in low-V lies
+    // v1.8/v1.12: hold nearly motionless — minimal wave/thrust in low-V lies
+    // (visual mesh inherits quieter idle vs cruise/burst)
     const modeAmp =
       mode === 'burst' ? 1.35 : mode === 'hold' ? 0.12 : mode === 'seek_hold' ? 0.65 : 1;
     const modeOmega =

@@ -1,4 +1,4 @@
-# Atlantic Salmon Migration Simulator (v1.11)
+# Atlantic Salmon Migration Simulator (v1.12)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
 
@@ -58,9 +58,9 @@ hydro → env → decisions → cameras → look
 | Hydro | `src/fish/Hydrodynamics.ts` | Buoyancy (**v1.8** near-neutral quiet hold), drag, **undulatory thrust (v1.7)**, dorsal-up attitude plant (v1.4), collision damp |
 | Body wave | `src/fish/BodyWave.ts` | Carangiform traveling-wave envelope → thrust / caudal / mesh bend |
 | Fins | `src/fish/Fins.ts` | Wired fins; caudal amp/phase locked to body wave (v1.7); pectorals light/visual |
-| Mesh | `src/fish/Mesh.ts` | Procedural fusiform body + wet PBR-ish materials; segmented undulatory bend |
+| Mesh | `src/fish/Mesh.ts` | **v1.12** adult *Salmo salar* fusiform + silver skin maps; cascading spine ↔ BodyWave; adipose + forked caudal |
 | Env packs | `src/env/packs/*` | Portable habitat data (v1.11): reach + lies; default `synthetic_ascent_v1`, denser `pool_riffle_v1` |
-| Env | `src/env/*` | River corridor, **continuous** current field (jet / bank BL / depth / pool & wake gradients), temperature, **odor/natal cue (v1.11)**, lie markers |
+| Env | `src/env/*` | River corridor, continuous current field, temperature, odor/natal cue; **v1.12** gravel/bank/water procedural maps |
 | Metabolism | `src/ai/Metabolism.ts` | v1.6 activity-dominated drain + light temp multiplier (Lennox-informed OOM) |
 | AI | `src/ai/*` | Sense → duty-cycled migrate/hold (**v1.8** residency); **v1.9 thermorefuge**; **v1.10 olfactory/homing lite**; mid-column cruise; anticipatory avoidance; **v1.6 metabolism** |
 | Cameras | `src/cameras/*` | Follow/chase + fish-eye wide-FOV (direct render) |
@@ -72,7 +72,7 @@ hydro → env → decisions → cameras → look
 
 - Target: Atlantic salmon adult, **migration / upriver ascent**
 - Portable fish; habitat = currents/shear/eddies lite, depth, temperature
-- Tradeoff: awareness/decisions first, then biomechanics, then visuals
+- Tradeoff: awareness/decisions first, then biomechanics, then visuals (**v1.12** visuals shipped; awareness still > polish)
 - Honest fidelity notes in [`ACCURACY.md`](./ACCURACY.md)
 
 ## License

@@ -446,7 +446,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.11 env packs / habitat data)\n');
+  console.log('asalmonsim accuracy harness (v1.12 high-realism visuals)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
