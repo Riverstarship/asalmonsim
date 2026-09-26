@@ -15,9 +15,12 @@ export interface HudState {
 
 /**
  * Title + toggleable info/HUD card. Accuracy lives in ACCURACY.md / harness / chat only.
+ * Chrome stack: controls row then HUD underneath so the panel never draws over buttons.
  */
 export class Overlay {
   readonly root: HTMLDivElement;
+  /** Left chrome column — Controls mounts here above the HUD. */
+  readonly chrome: HTMLDivElement;
   private hudEl: HTMLDivElement;
   private hudVisible = true;
 
@@ -32,12 +35,21 @@ export class Overlay {
       '<h1>Atlantic Salmon Migration Sim</h1><p>Observational · Salmo salar adult ascent</p>';
     this.root.appendChild(title);
 
+    this.chrome = document.createElement('div');
+    this.chrome.id = 'ui-chrome';
+    this.root.appendChild(this.chrome);
+
     this.hudEl = document.createElement('div');
     this.hudEl.id = 'hud';
     this.hudEl.className = 'panel';
-    this.root.appendChild(this.hudEl);
+    // HUD appended in sealChrome() after Controls so it sits under the button row
+  }
 
-    // Collapse HUD by default on narrow viewports for screen space
+  /** Append HUD under the controls row (call after Controls mounts into chrome). */
+  sealChrome(): void {
+    if (!this.hudEl.parentElement) {
+      this.chrome.appendChild(this.hudEl);
+    }
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) {
       this.setHudVisible(false);
     }

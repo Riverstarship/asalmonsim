@@ -55,14 +55,17 @@ export class Simulation {
     this.fishEye = new FishEyeCamera(w / h, w, h);
 
     this.overlay = new Overlay(container);
-    new Controls(
-      this.overlay.root,
+    // Mount controls into chrome, then seal HUD underneath (v1.10.1)
+    const controls = new Controls(
+      this.overlay.chrome,
       (mode) => {
         this.cameraMode = mode;
       },
       () => this.overlay.toggleHud(),
-      this.overlay.isHudVisible(),
+      true,
     );
+    this.overlay.sealChrome();
+    controls.syncHud(this.overlay.isHudVisible());
 
     window.addEventListener('resize', () => this.onResize());
   }

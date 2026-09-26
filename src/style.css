@@ -41,16 +41,31 @@ canvas {
   line-height: 1.45;
 }
 
-#controls {
+/* Left chrome: button row then HUD underneath — never overlaps controls */
+#ui-chrome {
   position: absolute;
   top: 12px;
   left: 12px;
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(320px, calc(100vw - 24px));
+  z-index: 2;
+  pointer-events: none;
+}
+
+#controls {
+  position: relative;
+  display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  z-index: 3;
+  pointer-events: none;
 }
 
 #controls button {
+  pointer-events: auto;
   background: rgba(40, 90, 60, 0.85);
   color: #e8f4e8;
   border: 1px solid rgba(140, 200, 150, 0.5);
@@ -71,11 +86,11 @@ canvas {
 }
 
 #hud {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+  position: relative;
   min-width: 200px;
-  max-width: 280px;
+  max-width: min(280px, 100%);
+  z-index: 1;
+  pointer-events: none;
 }
 
 #hud .label {
@@ -98,6 +113,8 @@ canvas {
   transform: translateX(-50%);
   text-align: center;
   pointer-events: none;
+  z-index: 1;
+  max-width: min(420px, calc(100vw - 280px));
 }
 
 #title-bar h1 {
@@ -117,8 +134,12 @@ canvas {
 }
 
 @media (max-width: 640px) {
+  #ui-chrome {
+    max-width: calc(100vw - 24px);
+  }
+
   #hud {
-    max-width: min(280px, calc(100vw - 24px));
+    max-width: 100%;
     font-size: 11px;
   }
 
@@ -126,6 +147,7 @@ canvas {
     top: auto;
     bottom: 10px;
     max-width: 90%;
+    transform: translateX(-50%);
   }
 
   #title-bar h1 {

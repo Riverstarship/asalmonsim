@@ -50,6 +50,11 @@ export class Controls {
     this.el.appendChild(this.hudBtn);
   }
 
+  /** Keep Show/Hide info button in sync after Overlay.sealChrome(). */
+  syncHud(visible: boolean): void {
+    this.syncHudBtn(visible);
+  }
+
   private syncHudBtn(visible: boolean): void {
     this.hudBtn.textContent = visible ? 'Hide info' : 'Show info';
     this.hudBtn.classList.toggle('active', visible);
