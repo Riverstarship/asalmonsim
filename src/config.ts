@@ -18,6 +18,11 @@ export interface SimConfig {
   dischargeScale: number;
   /** Target water temperature override °C, or null to derive from season/lat. */
   tempOverrideC: number | null;
+  /**
+   * Habitat env-pack id (v1.11). Default synthetic_ascent_v1.
+   * See src/env/packs/.
+   */
+  envPackId?: string;
 }
 
 /** Default: mid-autumn ascent, Scottish Highlands analogue. */
@@ -36,7 +41,10 @@ export const DEFAULT_CONFIG: SimConfig = {
 export const FISH_LENGTH_M = 0.75;
 export const FISH_MASS_KG = 4.5;
 
-/** River corridor extents (metres, sim space ≈ metres). */
+/**
+ * Default river corridor extents (metres) — alias of synthetic_ascent_v1.
+ * Prefer EnvPack via RiverEnvironment for pack-aware geometry (v1.11).
+ */
 export const RIVER = {
   length: 80,
   width: 12,

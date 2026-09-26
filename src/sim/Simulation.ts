@@ -134,6 +134,7 @@ export class Simulation {
       cameraMode: this.cameraMode,
       season: cfg.season,
       location: cfg.location.name,
+      pack: this.core.river.pack.name,
       dmg: this.core.dmg,
       timeInLie: this.core.timeInLieSec,
     });

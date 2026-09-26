@@ -18,6 +18,8 @@ export interface ScenarioDef {
   forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
   /** Natal cue mode (v1.10); 'flat' = control with no gradient. */
   odorMode?: OdorMode;
+  /** Habitat env-pack id (v1.11). Default synthetic_ascent_v1. */
+  envPack?: string;
 }
 
 export const SCENARIOS: ScenarioDef[] = [
@@ -232,6 +234,34 @@ export const SCENARIOS: ScenarioDef[] = [
     odorMode: 'flat',
     config: { tempOverrideC: 10 },
   },
+  {
+    id: 'pack_pool_riffle_hold',
+    description:
+      'Pool–riffle pack: denser structure → more lie occupancy / low-V hold vs default pack',
+    seed: 1311,
+    dt: 1 / 30,
+    duration: 40,
+    start: [0.3, 1.55, 10],
+    initialEnergy: 0.55,
+    dischargeScale: 1.05,
+    forceMode: 'seek_hold',
+    envPack: 'pool_riffle_v1',
+    config: { tempOverrideC: 10 },
+  },
+  {
+    id: 'pack_default_hold',
+    description:
+      'Default synthetic_ascent_v1 control (same seed/start/force): fewer lies / less structure',
+    seed: 1311,
+    dt: 1 / 30,
+    duration: 40,
+    start: [0.3, 1.55, 10],
+    initialEnergy: 0.55,
+    dischargeScale: 1.05,
+    forceMode: 'seek_hold',
+    envPack: 'synthetic_ascent_v1',
+    config: { tempOverrideC: 10 },
+  },
 ];
 
 export function runScenario(def: ScenarioDef): CoreMetrics {
@@ -248,6 +278,7 @@ export function runScenario(def: ScenarioDef): CoreMetrics {
     initialEnergy: def.initialEnergy,
     forceMode: def.forceMode,
     odorMode: def.odorMode,
+    envPack: def.envPack ?? cfg.envPackId,
   });
   return sim.run(def.duration, def.dt);
 }

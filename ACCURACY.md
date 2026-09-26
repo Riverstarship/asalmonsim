@@ -26,9 +26,9 @@ Sources used for planning (not claimed as “implemented”):
 
 **What real adults do *not* do:** pin continuously into banks and the free surface, or cruise at high thrust with no holding phase. That is a sim artifact to eliminate.
 
-## Gap vs current build (v1.10)
+## Gap vs current build (v1.11)
 
-| Ethology target | Current sim (v1.10) | Gap |
+| Ethology target | Current sim (v1.11) | Gap |
 |-----------------|---------------------|-----|
 | Stable dorsal-up attitude (no corkscrew) | **v1.4:** dorsal-up rebuild + roll damp/rate caps; harness `attitude_hydro` (roll ≈ 0°); preserved under v1.7 wave yaw | Pitch still angle-capped (~41°); wave yaw is light only |
 | Stepwise move/hold duty cycle | **v1.8:** longer holds, stronger migrate→hold hysteresis, lower migrate duty; harness holdFrac / low-speed raised | Still OOM vs multi-day telemetry residency (not multi-day wall time) |
@@ -42,6 +42,7 @@ Sources used for planning (not claimed as “implemented”):
 | Undulatory thrust from body wave | **v1.7:** carangiform `BodyWave` → hydro thrust + light yaw; caudal/mesh coupled; harness `undulatory_gait_*` + `undulatory_compare` | Not full FSI/CFD or FEM muscle; envelope model only |
 | Thermoregulatory cool / low-V refuge under heat | **v1.9:** heatStress signal; cool/low-V local probes + coolest-lie bias in seek/hold; modest hold duty under heat; harness `thermorefuge_*` + compare | Honest OOM only — not field-validated; TemperatureField synthetic bank/bed cool |
 | Olfactory / natal upstream homing | **v1.10:** `OdorField` natal source upstream; Sensors `odor`/`toHome`/`odorStrength`; migrate-cruise (+ light seek) cue bias; harness `homing_cue` vs `homing_flat` | Synthetic plume only — no real chemistry, imprinting, or estuary stage; bias is light OOM |
+| Portable habitat / env packs | **v1.11:** `EnvPack` + default `synthetic_ascent_v1` (parity) + denser `pool_riffle_v1`; River/Current/Temp/Odor load pack geometry; harness `env_pack_smoke` + `env_pack_compare` | Synthetic markers only — not real ADCP/GIS maps; ocean/estuary packs deferred |
 
 ## Version plan (toward the goal)
 
@@ -56,17 +57,18 @@ Sources used for planning (not claimed as “implemented”):
 | **v1.8** ✓ | **Hold-residency retune** | Ascending adults mostly motionless in low-V holds | ↑ holdFrac / timeHoldLowSpeed; attitude/undulatory/fatigue/hydraulics/containment green |
 | **v1.9** ✓ | **Thermoregulatory refuge** | Under heat stress, bias toward cooler + lower-V bank/bed pockets | `thermorefuge_warm` vs `_cool`: ↑ cool-refuge frac / holdTempDeficit under heat; prior gates green |
 | **v1.10** ✓ | **Olfactory / upstream homing lite** | Migratory bouts prefer progressing upstream toward natal cue | `homing_cue` vs `homing_flat`: ↑ migrate DMG / cue ascent with natal field; hold/attitude/fatigue/thermorefuge green |
-| **Later** | Maps / visuals, ocean/estuary packs | Expand habitat / observation without rewriting fish | Portable fish + env packs |
+| **v1.11** ✓ | **Maps / env pack** — portable habitat data | Hydraulics/temp/odor/lies sit on richer reach data without rewriting fish | `env_pack_smoke`; `env_pack_compare` (pool_riffle denser lies / ↑ lie occupancy vs default); prior gates green on default pack |
+| **Later** | Visuals / ocean-estuary packs | Expand observation / life-history stage | Textures, barrel polish, ocean/estuary packs |
 
-**Explicitly deferred:** real ADCP/CFD / FSI, FEM muscle, barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting, field-validated thermorefuge / olfactory chemistry, maps packs, estuary stage.
+**Explicitly deferred:** real ADCP/CFD / FSI, FEM muscle, barrel-distortion polish, textures, in-app accuracy overlay, precise validated kcal accounting, field-validated thermorefuge / olfactory chemistry, real GIS/ADCP map ingestion, estuary stage, ocean pack.
 
 ## Strategy (one line)
 
-Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → calibrate energy / fatigue-temp (v1.6) → undulatory biomechanics (v1.7) → hold-residency retune (v1.8) → thermorefuge (v1.9) → **olfactory/homing lite (v1.10)** → next: maps / visuals.
+Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude plant (v1.4) → truer continuous hydraulics (v1.5) → calibrate energy / fatigue-temp (v1.6) → undulatory biomechanics (v1.7) → hold-residency retune (v1.8) → thermorefuge (v1.9) → olfactory/homing lite (v1.10) → **env packs (v1.11)** → next: visuals / ocean.
 
-## Next (after v1.10)
+## Next (after v1.11)
 
-**Maps / visuals** (textures, barrel polish) → ocean/estuary packs. Decisions stay outer-loop; no FEM muscle / full FSI / real odor chemistry.
+**Visuals** (textures, barrel polish) → **ocean/estuary packs**. Decisions stay outer-loop; no FEM muscle / full FSI / real odor chemistry / real ADCP maps.
 
 ## Headless harness
 
@@ -74,7 +76,7 @@ Unblack the camera → hold/move like telemetry (v1.3) → stabilize attitude pl
 npm run test:accuracy
 ```
 
-Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.10 adds `homing_cue` / `homing_flat` relative gates on top of v1.9 thermorefuge + v1.8 hold-residency + v1.7 undulatory + v1.6 fatigue + v1.5 hydraulics + v1.4 attitude gates.
+Core loop: `CoreSim.step()` (shared with browser). Thresholds in `tests/baselines/` are order-of-magnitude gates, not field validation. v1.11 adds `env_pack_smoke` + `env_pack_compare` (pool_riffle vs synthetic_ascent) on top of v1.10 homing + v1.9 thermorefuge + v1.8 hold-residency + v1.7 undulatory + v1.6 fatigue + v1.5 hydraulics + v1.4 attitude gates. Default pack preserves prior scenario parity.
 
 ## Live demo
 
@@ -82,4 +84,4 @@ https://riverstarship.github.io/asalmonsim/ — repo may be temporarily public f
 
 ## UI
 
-Toggleable HUD only. No in-app accuracy overlay.
+Toggleable HUD only (v1.10.1: panel stacks under the camera button row — never overlaps controls). Optional pack name on site line (v1.11). No in-app accuracy overlay.

@@ -7,7 +7,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from '../../src/config';
 import { CoreSim, type CoreMetrics } from '../../src/sim/CoreSim';
-import { SCENARIOS, runScenario } from './scenarios';
+import { SCENARIOS, runScenario } from './scenarios'
+import { getEnvPack, listEnvPackIds } from '../../src/env/packs';
 import { drainRate as metabolicDrainRate } from '../../src/ai/Metabolism';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -119,6 +120,9 @@ interface Thresholds {
     minCueOverFlatMigrateDmgGap: number;
     minCueOverFlatCueAscentGap: number;
     minHoldFraction: number;
+  };
+  env_packs: {
+    minRiffleOverDefaultLieTimeGap: number;
   };
 }
 
@@ -442,7 +446,7 @@ function main(): void {
   let failed = 0;
   const summary: Record<string, unknown> = {};
 
-  console.log('asalmonsim accuracy harness (v1.10 olfactory / upstream homing lite)\n');
+  console.log('asalmonsim accuracy harness (v1.11 env packs / habitat data)\n');
 
   {
     const probe = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1 });
@@ -517,6 +521,68 @@ function main(): void {
     };
     // Keep legacy alias for older summaries
     summary.lie_velocity_deficit = { ok: lieRatio <= th.maxLieVsMidRatio, midSp, lieSp, kind: lie.kind };
+  }
+
+
+  // v1.11: env-pack load smoke — pack B differs in reach + structure density
+  {
+    const ids = listEnvPackIds();
+    const a = getEnvPack('synthetic_ascent_v1');
+    const b = getEnvPack('pool_riffle_v1');
+    const checks: Check[] = [
+      {
+        ok: ids.includes('synthetic_ascent_v1') && ids.includes('pool_riffle_v1'),
+        msg: `pack ids include synthetic_ascent_v1 + pool_riffle_v1 (got ${ids.join(',')})`,
+      },
+      {
+        ok: a.lies.length >= 5 && b.lies.length > a.lies.length,
+        msg: `lie count B ${b.lies.length} > A ${a.lies.length} (>=5)`,
+      },
+      {
+        ok: b.length > a.length && b.width >= a.width,
+        msg: `reach B ${b.length}x${b.width}m > A ${a.length}x${a.width}m`,
+      },
+      {
+        ok: a.id === 'synthetic_ascent_v1' && b.id === 'pool_riffle_v1',
+        msg: `pack ids ${a.id} / ${b.id}`,
+      },
+    ];
+    // Field sample smoke on both packs via CoreSim
+    const simA = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1, envPack: 'synthetic_ascent_v1' });
+    const simB = new CoreSim({ config: DEFAULT_CONFIG, headless: true, seed: 1, envPack: 'pool_riffle_v1' });
+    checks.push({
+      ok: simA.river.holdingLies.length === a.lies.length && simB.river.holdingLies.length === b.lies.length,
+      msg: `River lies A ${simA.river.holdingLies.length} / B ${simB.river.holdingLies.length}`,
+    });
+    checks.push({
+      ok: simA.river.length === a.length && simB.river.length === b.length,
+      msg: `River length A ${simA.river.length} / B ${simB.river.length}`,
+    });
+    // Prefer a bank/boulder lie (not a near-mid pool) for deficit probe
+    const lieB =
+      simB.river.holdingLies.find((h) => Math.abs(h.position.x) > 2.5) ??
+      simB.river.holdingLies[1]!;
+    const midB = simB.river.current.sample(0, lieB.position.y, lieB.position.z);
+    const inLieB = simB.river.current.sample(lieB.position.x, lieB.position.y, lieB.position.z);
+    const lieRatioB = midB.length() > 1e-6 ? inLieB.length() / midB.length() : 1;
+    checks.push({
+      ok: lieRatioB < 0.7,
+      msg: `pack B structure-lie/mid flow ratio ${lieRatioB.toFixed(3)} < 0.7 (${lieB.kind} |x|=${Math.abs(lieB.position.x).toFixed(1)})`,
+    });
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] env_pack_smoke`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.env_pack_smoke = {
+      ok,
+      lieCountA: a.lies.length,
+      lieCountB: b.lies.length,
+      lengthA: a.length,
+      lengthB: b.length,
+      lieRatioB,
+    };
   }
 
   for (const def of SCENARIOS) {
@@ -661,6 +727,20 @@ function main(): void {
           {
             ok: m.nanCount === 0,
             msg: `nanCount ${m.nanCount} === 0`,
+          },
+        ];
+        break;
+      case 'pack_pool_riffle_hold':
+      case 'pack_default_hold':
+        // Compared pairwise after the loop (structure density / lie occupancy)
+        checks = [
+          {
+            ok: m.nanCount === 0,
+            msg: `nanCount ${m.nanCount} === 0`,
+          },
+          {
+            ok: m.timeInHold + m.timeInLie + m.timeInSeekHold >= 5,
+            msg: `structure-seeking time ${(m.timeInHold + m.timeInLie + (m.timeInSeekHold ?? 0)).toFixed(1)}s >= 5`,
           },
         ];
         break;
@@ -881,6 +961,40 @@ function main(): void {
     }
     summary.homing_compare = { ok, checks };
   }
+
+  // v1.11 comparative: pool–riffle pack → more lie occupancy / denser structure use than default
+  {
+    const th = thresholds.env_packs;
+    const rich = (summary.pack_pool_riffle_hold as { metrics: CoreMetrics } | undefined)?.metrics;
+    const base = (summary.pack_default_hold as { metrics: CoreMetrics } | undefined)?.metrics;
+    const checks: Check[] = [];
+    if (!rich || !base) {
+      checks.push({ ok: false, msg: 'missing pack scenario metrics for compare' });
+    } else {
+      const lieGap = rich.timeInLie - base.timeInLie;
+      checks.push({
+        ok: rich.timeInLie >= base.timeInLie + th.minRiffleOverDefaultLieTimeGap,
+        msg: `riffle timeInLie ${rich.timeInLie.toFixed(2)}s >= default ${base.timeInLie.toFixed(2)}s + ${th.minRiffleOverDefaultLieTimeGap} (gap=${lieGap.toFixed(2)})`,
+      });
+      checks.push({
+        ok: rich.meanHoldFlow <= base.meanHoldFlow + 0.05,
+        msg: `riffle meanHoldFlow ${rich.meanHoldFlow.toFixed(3)} <= default ${base.meanHoldFlow.toFixed(3)} + 0.05`,
+      });
+      checks.push({
+        ok: rich.nanCount === 0 && base.nanCount === 0,
+        msg: `nanCount riffle ${rich.nanCount} / default ${base.nanCount}`,
+      });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) failed += 1;
+    console.log(`[${ok ? 'PASS' : 'FAIL'}] env_pack_compare`);
+    for (const c of checks) {
+      console.log(`       ${c.ok ? '✓' : '✗'} ${c.msg}`);
+    }
+    summary.env_pack_compare = { ok, checks };
+  }
+
+
 
   const summaryPath = join(METRICS_DIR, '_summary.json');
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2));

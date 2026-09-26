@@ -102,5 +102,8 @@
     "minCueOverFlatMigrateDmgGap": 0.35,
     "minCueOverFlatCueAscentGap": 0.02,
     "minHoldFraction": 0.2
+  },
+  "env_packs": {
+    "minRiffleOverDefaultLieTimeGap": 1.5
   }
 }

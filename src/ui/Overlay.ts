@@ -11,6 +11,8 @@ export interface HudState {
   location: string;
   dmg: number;
   timeInLie: number;
+  /** Optional habitat pack name (v1.11). */
+  pack?: string;
 }
 
 /**
@@ -83,8 +85,8 @@ export class Overlay {
       <div class="value">${s.groundSpeed.toFixed(2)} / ${s.waterSpeed.toFixed(2)} / ${s.flowSpeed.toFixed(2)} m/s</div>
       <div class="label">Temp</div>
       <div class="value">${s.tempC.toFixed(1)} °C</div>
-      <div class="label">Camera · Season · Site</div>
-      <div class="value">${escapeHtml(s.cameraMode)} · ${escapeHtml(s.season)} · ${escapeHtml(s.location)}</div>
+      <div class="label">Camera · Season · Site${s.pack ? ' · Pack' : ''}</div>
+      <div class="value">${escapeHtml(s.cameraMode)} · ${escapeHtml(s.season)} · ${escapeHtml(s.location)}${s.pack ? ` · ${escapeHtml(s.pack)}` : ''}</div>
     `;
   }
 }

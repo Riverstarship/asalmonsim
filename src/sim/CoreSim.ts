@@ -21,6 +21,8 @@ export interface CoreSimOptions {
   forceMode?: 'hold' | 'cruise' | 'burst' | 'seek_hold';
   /** Natal cue mode (v1.10). Default 'natal'; use 'flat' for control. */
   odorMode?: OdorMode;
+  /** Habitat env-pack id (v1.11). Default synthetic_ascent_v1. */
+  envPack?: string;
 }
 
 export interface CoreMetrics {
@@ -232,6 +234,7 @@ export class CoreSim {
     this.river = new RiverEnvironment(cfg, {
       visual: !headless,
       odorMode: opts.odorMode ?? 'natal',
+      envPack: opts.envPack ?? cfg.envPackId,
     });
     const start = opts.startPosition?.clone() ?? new THREE.Vector3(0, 1.2, 8);
     this.fish = new Salmon(start, { visual: !headless });
