@@ -1,3 +1,6 @@
+<details>
+<summary>Original description: expand</summary>
+
 # Atlantic Salmon Migration Simulator (v1.12)
 
 Observational **Vite + TypeScript + Three.js** demo of an adult Atlantic salmon (*Salmo salar*) ascending a simplified river corridor. No player swim controls — camera toggle and a toggleable info/HUD card (accuracy lives in ACCURACY.md / harness).
@@ -78,3 +81,4 @@ hydro → env → decisions → cameras → look
 ## License
 
 Demo / research sketch — no warranty of biological accuracy.
+</details>
